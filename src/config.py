@@ -5,6 +5,9 @@ class config:
         self.candidate_sites_file = "data/isoquant.tsstes"
         self.bam_file = "data/NA12878-cDNA.sorted.bam"
         self.tss_output_file, self.tes_output_file = self.get_output_file()
+        self.soft_clip_window = 10
+        self.splice_site_window = 10
+        self.coverage_window = 100
     
     def get_output_file(self):
         candidate_method = self.candidate_sites_file.split('/')[-1].split('.')[0]
