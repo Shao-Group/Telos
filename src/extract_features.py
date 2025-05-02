@@ -1,10 +1,14 @@
+import argparse
 import pysam
 import pandas as pd
 import numpy as np
 from collections import Counter
-import config
+from config import config
 import math
 import os
+from tqdm import tqdm
+
+
 # Your candidate sites (based on the format you shared)
 # candidate_sites_text = """
 # TSS GL000194.1 115066 0 1
@@ -143,17 +147,25 @@ def read_start_end_entropy(start_positions, end_positions, pos, cfg):
 
 
 def main():
-    cfg = config.config()
+    parser = argparse.ArgumentParser(description="Extract features from BAM file.")
+    parser.add_argument("--method", type=str, required=True, help="Candidate site method (e.g., 'stringtie', 'isoquant', etc.)")
+    args = parser.parse_args()
+    # Initialize configuration
+    cfg = config(args.method)
+    # cfg = config()
     # Open your BAM file
     bam = pysam.AlignmentFile(cfg.bam_file, "rb")  # <-- adjust path if needed
     # Load candidate sites
     tss_candidate_sites, tes_candidate_sites = load_candidate_sites(cfg.candidate_sites_file)
     # Collect features
-    tss_feature_list = [extract_features(bam, *site, cfg) for site in tss_candidate_sites]
+    print("Extracting TSS candidate features...")
+    tss_feature_list = [extract_features(bam, *site, cfg) for site in tqdm(tss_candidate_sites, desc="TSS Feature Extraction")]
     features_df = pd.DataFrame(tss_feature_list)
     features_df.to_csv(cfg.tss_output_file, index=False)
     # Collect features for TES
-    tes_feature_list = [extract_features(bam, *site, cfg) for site in tes_candidate_sites]
+    print("Extracting TES candidate features...")
+    tes_feature_list = [extract_features(bam, *site, cfg) for site in tqdm(tes_candidate_sites, desc="TES Feature Extraction")]
+    
     features_df = pd.DataFrame(tes_feature_list)
     features_df.to_csv(cfg.tes_output_file, index=False)
     # Close the BAM file
