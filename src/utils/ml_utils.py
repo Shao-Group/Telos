@@ -53,7 +53,7 @@ def load_model(model_type, config):
             learning_rate=config["learning_rate"],
             subsample=config["subsample"],
             colsample_bytree=config["colsample_bytree"],
-            use_label_encoder=False,
+            # use_label_encoder=False,
             objective="binary:logistic",
             eval_metric="logloss"
         )

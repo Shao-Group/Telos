@@ -51,7 +51,7 @@ def label_candidates(candidate_df, reference_df, site_type, max_distance=50):
     return candidate_df
 
 
-def process_one_file(method, site_type, feature_dir, output_dir, reference_df, chrom_mapping, max_distance):
+def process_one_file(method, site_type, feature_dir, output_dir, reference_df, max_distance):
     input_path = os.path.join(feature_dir, f"{method}_{site_type}.csv")
     output_path = os.path.join(output_dir, f"{method}_{site_type}_labeled.csv")
 
@@ -76,11 +76,11 @@ def main(args):
         site_types = ["tss", "tes"]
         for method in methods:
             for site_type in site_types:
-                process_one_file(method, site_type, args.feature_dir, args.output_dir, reference_df, chrom_mapping, args.distance)
+                process_one_file(method, site_type, args.feature_dir, args.output_dir, reference_df, args.distance)
     else:
         if not args.method or not args.site_type:
             raise ValueError("For non-batch mode, --method and --site_type must be specified.")
-        process_one_file(args.method, args.site_type, args.feature_dir, args.output_dir, reference_df, chrom_mapping, args.distance)
+        process_one_file(args.method, args.site_type, args.feature_dir, args.output_dir, reference_df, args.distance)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Label candidate TSS/TES sites based on reference.")

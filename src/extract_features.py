@@ -7,6 +7,7 @@ from config import config
 import math
 import os
 from tqdm import tqdm
+from scipy.stats import entropy
 
 
 # Your candidate sites (based on the format you shared)
@@ -41,7 +42,7 @@ def extract_features(bam, chrom, pos, strand, cfg):
     reads = bam.fetch(chrom, region_start, region_end)
 
     read_starts, read_ends, soft_clips, map_quals = [], [], [], []
-    strand_count = Counter()
+    strand_count = Counter(int)
     total_reads = 0
 
     for read in reads:
@@ -58,7 +59,12 @@ def extract_features(bam, chrom, pos, strand, cfg):
                 soft_clips.append(read.cigartuples[0][1])
             if read.cigartuples[-1][0] == 4:  # Soft clip at end
                 soft_clips.append(read.cigartuples[-1][1])
-    
+
+    window_radius = cfg.density_window
+    read_start_density = sum(1 for s in read_starts if abs(s - pos) <= window_radius)
+    read_end_density   = sum(1 for e in read_ends if abs(e - pos) <= window_radius)
+
+
     coverage_before, coverage_after, delta_coverage = calculate_coverage_change(bam, chrom, pos, cfg)
     nearest_splice = find_nearest_splice_site(bam, chrom, pos, cfg)
     softclip_bias = soft_clip_bias(bam, chrom, pos, cfg)
@@ -68,10 +74,13 @@ def extract_features(bam, chrom, pos, strand, cfg):
         "position": pos,
         "strand": strand,
         "total_reads": total_reads,
-        "read_start_density": read_starts.count(pos),
-        "read_end_density": read_ends.count(pos),
+        "read_start_density": read_start_density,
+        "read_end_density": read_end_density,
         "soft_clip_mean": np.mean(soft_clips) if soft_clips else 0,
         "soft_clip_max": max(soft_clips) if soft_clips else 0,
+        "soft_clip_median": np.median(soft_clips) if soft_clips else 0,
+        "soft_clip_count": len(soft_clips),
+        "soft_clip_entropy": softclip_entropy(reads, pos, cfg.soft_clip_window),
         "mean_mapq": np.mean(map_quals) if map_quals else 0,
         "std_mapq": np.std(map_quals) if map_quals else 0,
         "strand_ratio": strand_count["+"] / max(strand_count["-"], 1),
@@ -81,7 +90,8 @@ def extract_features(bam, chrom, pos, strand, cfg):
         "nearest_splice_dist": nearest_splice,
         "softclip_bias": softclip_bias,
         "start_entropy": start_entropy,
-        "end_entropy": end_entropy
+        "end_entropy": end_entropy, 
+        "full_length_reads": sum(1 for r in reads if r.reference_start < region_start + 10 and r.reference_end > region_end - 10)
     }
 
 
@@ -130,6 +140,7 @@ def soft_clip_bias(bam, chrom, pos, cfg):
             soft_clip_count += 1
     return soft_clip_count / total_reads if total_reads else 0
 
+
 def calculate_entropy(positions):
     """Calculate entropy of read starts or ends."""
     if len(positions) == 0:
@@ -138,6 +149,29 @@ def calculate_entropy(positions):
     total = sum(count.values())
     entropy = -sum((freq/total) * math.log2(freq/total) for freq in count.values())
     return entropy
+
+def softclip_entropy(reads, pos, window=5):
+    clipped_bases = []
+    for r in reads:
+        if not r.cigartuples: continue
+        if r.cigartuples[0][0] == 4 and abs(r.reference_start - pos) <= window:
+            clipped_bases.extend(r.query_sequence[:r.cigartuples[0][1]])
+        if r.cigartuples[-1][0] == 4 and abs(r.reference_end - pos) <= window:
+            clipped_bases.extend(r.query_sequence[-r.cigartuples[-1][1]:])
+    if not clipped_bases:
+        return 0
+    return entropy(Counter(clipped_bases).values(), base=2)
+
+
+def compute_strand(read):
+    ts = read.get_tag("ts")
+    if ts not in ["+", "-"]:
+        # raise ValueError(f"Invalid strand tag: {ts}")
+        return "."
+    if read.is_reverse:
+        return "-" if ts == "+" else "+"
+    else:
+        return "+" if ts == "+" else "-"
 
 def read_start_end_entropy(start_positions, end_positions, pos, cfg):
     """Entropy around read start and end positions."""

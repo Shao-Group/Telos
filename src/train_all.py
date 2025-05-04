@@ -1,11 +1,10 @@
 import subprocess
 import os
 from datetime import datetime
-import tqdm
 
 tools = ["stringtie", "isoquant"]
 site_types = ["tss", "tes"]
-models = ["xgboost", "lightgbm", "randomforest"]
+models = ["xgboost", "randomforest"]
 # models = ["randomforest"]
 log_dir = "logs"
 os.makedirs(log_dir, exist_ok=True)
@@ -47,5 +46,3 @@ with open(log_path, "w") as log:
 
                 if result.stderr.strip():
                     log.write(f"\n[stderr]\n{result.stderr}")
-
-                
