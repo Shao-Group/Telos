@@ -1,3 +1,5 @@
+import os
+import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
@@ -24,6 +26,11 @@ def evaluate_model(y_true, y_pred, y_prob, plot_path=None):
     rec = recall_score(y_true, y_pred)
     cm = confusion_matrix(y_true, y_pred)
 
+    # PR curve dataframe
+    pr_data = pd.DataFrame({"precision": precision, "recall": recall})
+    prefix = os.path.splitext(plot_path)[0]
+
+    pr_data.to_csv(f"{prefix}_pr_data.csv", index=False)
     if plot_path:
         plt.figure()
         plt.plot(recall, precision, label=f"PR AUC={aupr:.3f}")

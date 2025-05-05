@@ -42,7 +42,7 @@ def extract_features(bam, chrom, pos, strand, cfg):
     reads = bam.fetch(chrom, region_start, region_end)
 
     read_starts, read_ends, soft_clips, map_quals = [], [], [], []
-    strand_count = Counter(int)
+    strand_count = Counter()
     total_reads = 0
 
     for read in reads:

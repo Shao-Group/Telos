@@ -56,6 +56,14 @@ def train_and_evaluate(df, model_type, config, site_type, tool):
         sorted_feats = np.array(numeric_cols)[sorted_idx]
         sorted_vals = importances[sorted_idx]
 
+        # Save as CSV
+        fi_df = pd.DataFrame({
+            "feature": sorted_feats,
+            "importance": sorted_vals
+        })
+        fi_df.to_csv(os.path.join(report_dir, f"{tool}_rf_feature_importance.csv"), index=False)
+
+
         plt.figure(figsize=(8, 6))
         plt.barh(sorted_feats[:20][::-1], sorted_vals[:20][::-1])  # top 20
         plt.xlabel("Importance")
