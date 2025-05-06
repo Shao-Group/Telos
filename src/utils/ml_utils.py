@@ -11,8 +11,24 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 def stratified_split(df, label_col='label', test_size=0.2, seed=42):
-    X_train, X_val, y_train, y_val =  train_test_split(df, df[label_col], test_size=test_size, stratify=df[label_col], random_state=seed)
+    # X_train, X_val, y_train, y_val =  train_test_split(df, df[label_col], test_size=test_size, stratify=df[label_col], random_state=seed)
+    # split based on chromosome 
+    chromosomes = df['chrom'].unique()
+    # train_chromosomes, val_chromosomes = train_test_split(chromosomes, test_size=test_size, random_state=seed)
+    train_chromosomes = ["chr" + str(i) for i in range(1,15)]
+    val_chromosomes = [x for x in chromosomes if x not in train_chromosomes]
+    print(f"Train chromosomes: {train_chromosomes}")
+    print(f"Validation chromosomes: {val_chromosomes}")
+    train_mask = df['chrom'].isin(train_chromosomes)
+    val_mask = df['chrom'].isin(val_chromosomes)
+    X_train = df[train_mask].drop(columns=[label_col])
+    X_val = df[val_mask].drop(columns=[label_col])
+    y_train = df[train_mask][label_col]
+    y_val = df[val_mask][label_col]
 
+    print(f"Train size: {X_train.shape}, Validation size: {X_val.shape}")
+    print(f"Train label distribution: {y_train.value_counts(normalize=True)}")
+    print(f"Validation label distribution: {y_val.value_counts(normalize=True)}")
     return X_train, X_val, y_train, y_val
     
 

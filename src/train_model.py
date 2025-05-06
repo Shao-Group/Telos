@@ -37,6 +37,8 @@ def train_and_evaluate(df, model_type, config, site_type, tool):
     model_dir = f"models/{site_type}"
     report_dir = f"out/reports/{site_type}"
     plot_dir = f"out/plots/{site_type}"
+    prediction_dir = f"out/predictions/{site_type}"
+    os.makedirs(prediction_dir, exist_ok=True)
     os.makedirs(model_dir, exist_ok=True)
     os.makedirs(report_dir, exist_ok=True)
     os.makedirs(plot_dir, exist_ok=True)
@@ -85,8 +87,38 @@ def train_and_evaluate(df, model_type, config, site_type, tool):
             else:
                 f.write(f"{k}: {v:.4f}\n")
 
+    # Save predictions as TSV
+    pred_df = df.loc[y_val.index, ['chrom', 'position', 'label']].copy()
+    pred_df["site_type"] = site_type.upper()
+    pred_df["prediction"] = y_pred
+    pred_df = pred_df[["site_type", "chrom", "position", "label", "prediction"]]
+    pred_df["chrom"] = pred_df["chrom"].astype(str)
+    pred_df["position"] = pred_df["position"].astype(int)
+    pred_df["label"] = pred_df["label"].astype(int)
+    pred_df["prediction"] = pred_df["prediction"].astype(int)
+
+    pred_df.to_csv(os.path.join(prediction_dir, f"{tool}_{model_type}_predictions.tsv"), sep="\t", index=False)
 
     return metrics
+
+
+
+def merge_tss_tes_predictions(pred_dir, tool, model_type):
+    """
+    Merge TSS and TES predictions into one TSV file if both exist.
+    """
+    tss_file = os.path.join(pred_dir, "tss", f"{tool}_{model_type}_predictions.tsv")
+    tes_file = os.path.join(pred_dir, "tes", f"{tool}_{model_type}_predictions.tsv")
+    merged_file = os.path.join(pred_dir, f"{tool}_{model_type}_merged.tsv")
+
+    if os.path.exists(tss_file) and os.path.exists(tes_file):
+        df_tss = pd.read_csv(tss_file, sep='\t')
+        df_tes = pd.read_csv(tes_file, sep='\t')
+        merged_df = pd.concat([df_tss, df_tes], ignore_index=True)
+        merged_df.to_csv(merged_file, sep='\t', index=False)
+        print(f"✅ [INFO] Merged TSS and TES predictions saved to {merged_file}")
+    else:
+        print("[INFO] TSS or TES prediction file missing. Merge skipped.")
 
 def main():
     parser = argparse.ArgumentParser()
@@ -110,5 +142,10 @@ def main():
 
     print(f"✅ {args.site_type.upper()} [{args.model_type}] - F1: {metrics['f1']:.4f}, AUPR: {metrics['aupr']:.4f}")
 
+    merge_tss_tes_predictions(pred_dir="out/predictions", tool=tool, model_type=args.model_type)
+
 if __name__ == "__main__":
     main()
+    # Attempt to merge after each run
+    
+

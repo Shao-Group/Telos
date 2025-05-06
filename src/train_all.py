@@ -39,6 +39,7 @@ with open(log_path, "w") as log:
 
                 log.write(f"\n===== {site_tag} =====\n")
                 log.write(result.stdout)
+                log.flush()
                 if result.returncode == 0:
                     print(f"✅ [DONE]  {site_tag}")
                 else:
