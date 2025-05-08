@@ -91,11 +91,13 @@ def train_and_evaluate(df, model_type, config, site_type, tool):
     pred_df = df.loc[y_val.index, ['chrom', 'position', 'label']].copy()
     pred_df["site_type"] = site_type.upper()
     pred_df["prediction"] = y_pred
-    pred_df = pred_df[["site_type", "chrom", "position", "label", "prediction"]]
+    pred_df["probability"] = y_prob
+    pred_df = pred_df[["site_type", "chrom", "position", "label", "prediction", "probability"]]
     pred_df["chrom"] = pred_df["chrom"].astype(str)
     pred_df["position"] = pred_df["position"].astype(int)
     pred_df["label"] = pred_df["label"].astype(int)
     pred_df["prediction"] = pred_df["prediction"].astype(int)
+    pred_df["probability"] = pred_df["probability"].astype(float)
 
     pred_df.to_csv(os.path.join(prediction_dir, f"{tool}_{model_type}_predictions.tsv"), sep="\t", index=False)
 

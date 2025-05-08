@@ -64,7 +64,7 @@ def extract_features(bam, chrom, pos, strand, cfg):
     read_start_density = sum(1 for s in read_starts if abs(s - pos) <= window_radius)
     read_end_density   = sum(1 for e in read_ends if abs(e - pos) <= window_radius)
 
-
+    
     coverage_before, coverage_after, delta_coverage = calculate_coverage_change(bam, chrom, pos, cfg)
     nearest_splice = find_nearest_splice_site(bam, chrom, pos, cfg)
     softclip_bias = soft_clip_bias(bam, chrom, pos, cfg)
@@ -97,14 +97,25 @@ def extract_features(bam, chrom, pos, strand, cfg):
 
 def calculate_coverage_change(bam, chrom, pos, cfg):
     """Calculate coverage before and after the candidate site."""
-    region_before = bam.count_coverage(
-        chrom, max(0, pos - cfg.coverage_window), pos, quality_threshold=cfg.min_mapq)
-    region_after = bam.count_coverage(
-        chrom, pos, pos + cfg.coverage_window, quality_threshold=cfg.min_mapq)
+    if pos < cfg.coverage_window:
+        print(f"Warning: Position {pos} is too close to the start of the chromosome {chrom}.")
+        coverage_before = 0
+    else:
+        region_before = bam.count_coverage(
+            chrom, pos - cfg.coverage_window, pos, quality_threshold=cfg.min_mapq)
+        coverage_before = int(np.sum(region_before))
     
-    # Sum ACGT counts for total coverage
-    coverage_before = int(np.sum(region_before))
-    coverage_after = int(np.sum(region_after))
+    chrom_length = bam.get_reference_length(chrom)
+    if pos + cfg.coverage_window > chrom_length:
+        print(f"Warning: Position {pos} is too close to the end of the chromosome {chrom}.")
+        coverage_after = 0
+    else:
+        # Ensure we don't go out of bounds
+        region_after = bam.count_coverage(
+            chrom, pos, pos + cfg.coverage_window, quality_threshold=cfg.min_mapq)
+        coverage_after = int(np.sum(region_after))
+
+
     delta_coverage = coverage_after - coverage_before
     return coverage_before, coverage_after, delta_coverage
 
@@ -182,10 +193,12 @@ def read_start_end_entropy(start_positions, end_positions, pos, cfg):
 
 def main():
     parser = argparse.ArgumentParser(description="Extract features from BAM file.")
-    parser.add_argument("--method", type=str, required=True, help="Candidate site method (e.g., 'stringtie', 'isoquant', etc.)")
+    parser.add_argument("-m", "--method", type=str, required=True, help="Candidate site method (e.g., 'stringtie', 'isoquant', etc.)")
+    parser.add_argument("-b","--bam_file", type=str, required=True, help="Path to the BAM file.")
+    parser.add_argument("-c","--candidate_sites_file", type=str, required=True, help="Path to the candidate sites file.")
     args = parser.parse_args()
     # Initialize configuration
-    cfg = config(args.method)
+    cfg = config(args.method, args.bam_file, args.candidate_sites_file)
     # cfg = config()
     # Open your BAM file
     bam = pysam.AlignmentFile(cfg.bam_file, "rb")  # <-- adjust path if needed

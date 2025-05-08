@@ -1,8 +1,9 @@
 import subprocess
 import os
 from datetime import datetime
+import pandas as pd 
 
-tools = ["stringtie", "isoquant"]
+tools = ["stringtie", "isoquant", "universe"]
 site_types = ["tss", "tes"]
 models = ["xgboost", "randomforest"]
 # models = ["randomforest"]
@@ -15,6 +16,23 @@ with open(log_path, "w") as log:
     log.write(f" Training started: {datetime.now()}\n")
 
     for tool in tools:
+        if tool == "universe":
+            # concatenate all the tss and tes files from other tool types and drop duplicates
+            # this is to create a universe dataset that contains all the tss and tes from all tools
+        
+            tss_files = [f"data_train/{t}_tss_labeled.csv" for t in tools if t != "universe"]
+            tes_files = [f"data_train/{t}_tes_labeled.csv" for t in tools if t != "universe"]
+            all_tss = pd.concat([pd.read_csv(f) for f in tss_files if os.path.exists(f) or print(f"file {f} not found")], ignore_index=True).reset_index(drop=True)
+            all_tes = pd.concat([pd.read_csv(f) for f in tes_files if os.path.exists(f) or print(f"file {f} not found")], ignore_index=True).reset_index(drop=True)
+            # drop duplicates
+            all_tss = all_tss.drop_duplicates(subset=["chrom", "position", "strand"], keep="first")
+            all_tes = all_tes.drop_duplicates(subset=["chrom", "position", "strand"], keep="first")
+            # save to csv
+            all_tss.to_csv("data_train/universe_tss_labeled.csv", index=False)
+            all_tes.to_csv("data_train/universe_tes_labeled.csv", index=False)
+            print("✅ Universe files created successfully.")
+            
+
         for site in site_types:
             for model_type in models:
                 input_file = f"data_train/{tool}_{site}_labeled.csv"

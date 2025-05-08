@@ -4,20 +4,20 @@ import pandas as pd
 import argparse
 import numpy as np
 
-def main(root_dir, output_dir):
+def main(root_dir, output_dir, hardness="hard"):
     # Ensure the root directory exists
     if not os.path.exists(root_dir):
         raise FileNotFoundError(f"The directory {root_dir} does not exist.")
 
     # Regex for extracting metrics
-    metric_pattern = re.compile(r'(\w+ level):\s+([0-9.]+)\s+\|\s+([0-9.]+)')
+    metric_pattern = re.compile(r'(\w*\s\w+ level):\s+([0-9.]+)\s+\|\s+([0-9.]+)')
 
     # Where we store all rows
     rows = []
 
     # Map directory to filter name
     filter_dirs = {
-        'validation-baseline': 'baseline',
+        'val-baseline': 'baseline',
         'filtered-randomforest': 'randomforest',
         'filtered-xgboost': 'xgboost'
     }
@@ -33,8 +33,14 @@ def main(root_dir, output_dir):
 
                 for match in metric_pattern.finditer(content):
                     level = match.group(1).replace(' level', '').lower()
+                    level.replace(' ', '_')
+                    # print(level)
+                    if (level.lower().strip() in ['base', 'exon', 'locus']):
+                        # print(f"Skipping {level} level for {tool} in {filter_name}")
+                        continue
                     sens = float(match.group(2))
                     prec = float(match.group(3))
+                    
                     rows.append({
                         'tool': tool,
                         'filter': filter_name,
@@ -56,7 +62,7 @@ def main(root_dir, output_dir):
     summary.reset_index(inplace=True)
 
     # Save to Markdown
-    with open(os.path.join(output_dir, 'summary.md'), 'w') as f:
+    with open(os.path.join(output_dir, f'summary-{hardness}.md'), 'w') as f:
         f.write(summary.to_markdown(index=False))
 
     # Optional: also save to CSV
@@ -64,8 +70,9 @@ def main(root_dir, output_dir):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compile GFFCompare results.")
-    parser.add_argument("--root_dir", dest = "root", type=str, required=True,  help="Root directory containing the results.")
-    parser.add_argument("--output_dir", dest="output", type=str, default=".", help="Directory to save the summary files.")
+    parser.add_argument('-r',"--root_dir", dest = "root", type=str, required=True,  help="Root directory containing the results.")
+    parser.add_argument('-o', "--output_dir", dest="output", type=str, default="out/", help="Directory to save the summary files.")
+    parser.add_argument('-d', "--hardness", dest="hardness", type=str, default="hard", help="Hardness level of the results (default: hard).")
     args = parser.parse_args()
     
-    main(args.root_dir, args.output)
+    main(args.root, args.output, args.hardness)
