@@ -9,14 +9,14 @@ import os
 from tqdm import tqdm
 from scipy.stats import entropy
 
-
-# Your candidate sites (based on the format you shared)
-# candidate_sites_text = """
+# Example candidate sites text
 # TSS GL000194.1 115066 0 1
 # TSS GL000195.1 86726 0 2
 # TSS GL000195.1 137958 4 0
 # TSS GL000195.1 142050 1 0
-# """
+
+
+
 def load_candidate_sites(file_path):
     with open(file_path, 'r') as f:
         candidate_sites_text = f.read()
@@ -191,30 +191,25 @@ def read_start_end_entropy(start_positions, end_positions, pos, cfg):
     return start_entropy, end_entropy
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Extract features from BAM file.")
-    parser.add_argument("-m", "--method", type=str, required=True, help="Candidate site method (e.g., 'stringtie', 'isoquant', etc.)")
-    parser.add_argument("-b","--bam_file", type=str, required=True, help="Path to the BAM file.")
-    parser.add_argument("-c","--candidate_sites_file", type=str, required=True, help="Path to the candidate sites file.")
-    args = parser.parse_args()
-    # Initialize configuration
-    cfg = config(args.method, args.bam_file, args.candidate_sites_file)
-    # cfg = config()
-    # Open your BAM file
+def main(cfg):
+    if cfg == None:
+        return
+    
     bam = pysam.AlignmentFile(cfg.bam_file, "rb")  # <-- adjust path if needed
-    # Load candidate sites
     tss_candidate_sites, tes_candidate_sites = load_candidate_sites(cfg.candidate_sites_file)
+    
     # Collect features
     print("Extracting TSS candidate features...")
     tss_feature_list = [extract_features(bam, *site, cfg) for site in tqdm(tss_candidate_sites, desc="TSS Feature Extraction")]
     features_df = pd.DataFrame(tss_feature_list)
     features_df.to_csv(cfg.tss_output_file, index=False)
-    # Collect features for TES
+    
     print("Extracting TES candidate features...")
     tes_feature_list = [extract_features(bam, *site, cfg) for site in tqdm(tes_candidate_sites, desc="TES Feature Extraction")]
     
     features_df = pd.DataFrame(tes_feature_list)
     features_df.to_csv(cfg.tes_output_file, index=False)
+    
     # Close the BAM file
     bam.close()
 

@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+import logging
+import subprocess
+import sys
+from pathlib import Path
+from dataclasses import dataclass, field
+from typing import List
+
+
+@dataclass
+class PipelineConfig:
+    data_name: str
+    pred_dir: Path = field(init = False) 
+    # Repositories / tools
+    home: Path = Path("/datadisk1/ixk5174/tools/rnaseqtools/gtfformat")
+    home_cuff: Path = Path("/datadisk1/ixk5174/tools/rnaseqtools/gtfcuff")
+    gffcompare_env: str = "gffcompare"
+
+    # Data directories
+    data_home: Path = Path("/datadisk1/ixk5174/long_reads_compare/out/gffcomp-results/")
+    data_dir: Path = field(init=False)
+    project_out_dir: Path = Path("/datadisk1/ixk5174/tools/tss-tes-project/out/")
+    project_data_dir: Path = Path("/datadisk1/ixk5174/tools/tss-tes-project/data/")
+    out_dir: Path = field(init=False)
+    roc_out_dir: Path = field(init=False)
+    ref_anno: Path = Path("/datadisk1/ixk5174/long_reads_compare/anno/refSeq_anno.gtf")
+    val_chrom: Path = Path("/datadisk1/ixk5174/tools/tss-tes-project/data_train/validation_chromosomes.txt")
+
+    # Parameters
+    tools: List[str]  = field(default_factory=lambda: ["stringtie", "isoquant"])
+    models: List[str] = field(default_factory=lambda: ["xgboost", "randomforest"])
+
+    def __post_init__(self):
+        self.data_home = self.data_home / self.data_name
+        self.data_dir    = self.data_home / "val-baseline"
+        self.out_dir     = self.data_home / "updated-cov"
+        self.roc_out_dir = self.out_dir  / "roc"
+        self.pred_dir = self.project_out_dir / self.data_name / "predictions"
+        self.project_data_dir = self.project_data_dir / self.data_name
+        
+    
+
+class TSSPipeline:
+    def __init__(self, cfg: PipelineConfig):
+        self.cfg = cfg
+        # ensure output dirs exist
+        self.cfg.out_dir.mkdir(parents=True, exist_ok=True)
+        self.cfg.roc_out_dir.mkdir(parents=True, exist_ok=True)
+
+    def _run(self, cmd: List[str], cwd: Path = None, **kwargs):
+        """Run a subprocess with logging and error checking."""
+        logging.info(f"→ {' '.join(cmd)}  (cwd={cwd})")
+        proc = subprocess.run(cmd, cwd=cwd, check=True, **kwargs)
+        # print(proc.stdout)
+        # print(proc.stderr)
+
+    def _gffcompare_cmd(self, *args) -> List[str]:
+        """Wrap gffcompare in a conda-run command."""
+        return ["conda", "run", "-n", self.cfg.gffcompare_env, "gffcompare", *args]
+
+    def build_gtfformat(self):
+        """Clean + make the gtfformat tool."""
+        self._run(["make", "clean"], cwd=self.cfg.home)
+        self._run(["make"],       cwd=self.cfg.home)
+
+    def update_coverage(self, tool: str, model: str, universe: bool = False):
+        """Invoke gtfformat update-cov for one (tool,model)."""
+        data_file = self.cfg.data_dir / f"{tool}-chrom-filtered.gtf"
+        pred_name = f"{'universe_' if universe else f'{tool}_'}{model}_merged.tsv"
+        pred_file = self.cfg.pred_dir / pred_name
+
+        suffix = f"universe-{model}" if universe else model
+        out_file = self.cfg.out_dir / f"{tool}-{suffix}-updated-cov.gtf"
+
+        logging.info(f"[{tool}/{suffix}] update-cov")
+        self._run(
+            ["./gtfformat", "update-cov", str(data_file), str(pred_file), str(out_file)],
+            cwd=self.cfg.home
+        )
+        return out_file, f"{tool}-{suffix}"
+
+    def run_gffcompare(self, gtf: Path, label: str, cwd: Path):
+        """Run gffcompare inside the conda env."""
+        logging.info(f"[{label}] gffcompare")
+        cmd = self._gffcompare_cmd("-r", str(self.cfg.ref_anno), "-o", label, str(gtf))
+        self._run(cmd, cwd=cwd)
+
+    def generate_roc(self, label: str):
+        """Run gtfcuff roc on a .tmap → .roc file."""
+        tmap = self.cfg.out_dir / f"{label}.{label}-updated-cov.gtf.tmap" 
+        roc  = self.cfg.roc_out_dir / f"{label}-updated-cov.roc"
+        logging.info(f"[{label}] gtfcuff roc → {roc.name}")
+        with roc.open("w") as out_fh:
+            self._run(
+                ["./gtfcuff", "roc", str(tmap), "189216", "cov"],
+                cwd=self.cfg.home_cuff,
+                stdout=out_fh
+            )
+
+    def process_model(self, tool: str, model: str):
+        """Full pipeline for one tool/model pair."""
+        # 1) update-cov for standard & universe
+        for is_universe in (False, True):
+            gtf, label = self.update_coverage(tool, model, universe=is_universe)
+            # 2) gffcompare
+            self.run_gffcompare(gtf, label, cwd=self.cfg.out_dir)
+            # 3) ROC
+            self.generate_roc(label)
+
+    def process_all(self):
+        """Run build + all tool/model combinations + baseline."""
+        # self.build_gtfformat()
+        self.generate_baseline()
+
+        for tool in self.cfg.tools:
+            for model in self.cfg.models:
+                self.process_model(tool, model)
+
+        self.process_baseline()
+
+    def process_baseline(self):
+        """Run gffcompare & ROC for the original baseline gtfs."""
+        logging.info("[baseline] processing original GTFs")
+        for tool in self.cfg.tools:
+            gtf   = self.cfg.data_dir / f"{tool}-chrom-filtered.gtf"
+            label = f"{tool}-baseline"
+
+            # gffcompare
+            self.run_gffcompare(gtf, label, cwd=self.cfg.data_dir)
+            # ROC
+            # self.generate_roc(label)
+            tmap = self.cfg.data_dir / f"{label}.{tool}-chrom-filtered.gtf.tmap"
+            roc_out_file = self.cfg.roc_out_dir / f"{label}.roc"
+            # print(f"roc: {out_fh}")
+            with roc_out_file.open("w") as out_fh:
+                self._run(
+                    ["./gtfcuff", "roc", str(tmap), "189216", "cov"],
+                    cwd=self.cfg.home_cuff,
+                    stdout=out_fh
+                )
+    
+    def generate_baseline(self):
+        """Filter the baseline GTFs with validation chromosomes."""
+        logging.info("[baseline] filtering original GTFs")
+        self.cfg.data_dir.mkdir(parents=True, exist_ok=True)
+        for tool in self.cfg.tools:
+            gtf = self.cfg.project_data_dir / f"{tool}.gtf"
+            out_gtf = self.cfg.data_dir / f"{tool}-chrom-filtered.gtf"
+            self._run(
+                ["./gtfformat", "filter-chrom", str(gtf), str(self.cfg.val_chrom), str(out_gtf)],
+                cwd=self.cfg.home
+            )
+
+            if tool == "isoquant":
+                # isoquant has a different format for the GTF
+                # we need to convert it to the standard GTF format
+                tpm_file = self.cfg.project_data_dir / f"{tool}.tpm"
+                self._run(
+                    ["./gtfformat", "update-tpm", str(out_gtf), str(tpm_file), str(out_gtf)],
+                    cwd=self.cfg.home
+                )
+
+
+
+
+def main(data_name: str):
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    cfg = PipelineConfig(data_name = data_name)
+    pipeline = TSSPipeline(cfg)
+    try:
+        pipeline.process_all()
+        return cfg.roc_out_dir
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Step failed (exit code {e.returncode}).")
+        sys.exit(e.returncode)
+

@@ -68,7 +68,7 @@ def main(args):
     chrom_mapping = dict(zip(chrom_mapping["chrom"], chrom_mapping["mapped"]))
     reference_df['chrom'] = reference_df['chrom'].map(chrom_mapping)
     # print reference_df after shuffling 
-    print(reference_df.sample(frac=1).head(5))
+    # print(reference_df.sample(frac=1).head(5))
     os.makedirs(args.output_dir, exist_ok=True)
 
     if args.batch:
@@ -77,6 +77,7 @@ def main(args):
         for method in methods:
             for site_type in site_types:
                 process_one_file(method, site_type, args.feature_dir, args.output_dir, reference_df, args.distance)
+        print("All files processed in batch mode.")
     else:
         if not args.method or not args.site_type:
             raise ValueError("For non-batch mode, --method and --site_type must be specified.")

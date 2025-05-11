@@ -10,7 +10,7 @@ from config import config
 
 from utils.ml_utils import stratified_split, evaluate_model, load_model
 
-def train_and_evaluate(df, model_type, config, site_type, tool):
+def train_and_evaluate(df, model_type, config, site_type, tool, out_dir):
     drop = ["chrom", "position", "strand", "label" , "soft_clip_entropy", ""]
     # drop += ['read_start_density', 'read_end_density', 'mean_mapq', 'std_mapq', 'nearest_splice_dist']
     features_to_normalize = ["total_reads", "read_start_density", "read_end_density", "soft_clip_mean", "soft_clip_max", "mean_mapq", "std_mapq", "strand_ratio", "coverage_before", "coverage_after", "delta_coverage", "nearest_splice_dist", "softclip_bias"]
@@ -35,9 +35,9 @@ def train_and_evaluate(df, model_type, config, site_type, tool):
     y_prob = model.predict_proba(X_val)[:, 1]
 
     model_dir = f"models/{site_type}"
-    report_dir = f"out/reports/{site_type}"
-    plot_dir = f"out/plots/{site_type}"
-    prediction_dir = f"out/predictions/{site_type}"
+    report_dir = f"{out_dir}/reports/{site_type}"
+    plot_dir = f"{out_dir}/plots/{site_type}"
+    prediction_dir = f"{out_dir}/predictions/{site_type}"
     os.makedirs(prediction_dir, exist_ok=True)
     os.makedirs(model_dir, exist_ok=True)
     os.makedirs(report_dir, exist_ok=True)
@@ -101,7 +101,7 @@ def train_and_evaluate(df, model_type, config, site_type, tool):
 
     pred_df.to_csv(os.path.join(prediction_dir, f"{tool}_{model_type}_predictions.tsv"), sep="\t", index=False)
 
-    return metrics
+    return metrics, prediction_dir
 
 
 
@@ -120,7 +120,7 @@ def merge_tss_tes_predictions(pred_dir, tool, model_type):
         merged_df.to_csv(merged_file, sep='\t', index=False)
         print(f"✅ [INFO] Merged TSS and TES predictions saved to {merged_file}")
     else:
-        print("[INFO] TSS or TES prediction file missing. Merge skipped.")
+        print(f"[INFO] TSS: {tss_file} or TES: {tes_file} prediction file missing. Merge skipped.")
 
 def main():
     parser = argparse.ArgumentParser()
@@ -129,6 +129,7 @@ def main():
     parser.add_argument("--site_type", required=True, choices=["tss", "tes"])
     parser.add_argument("--model_type", required=True, choices=["xgboost", "lightgbm", "randomforest"])
     parser.add_argument("--normalize", action='store_true', default=False, help="Normalize features")
+    parser.add_argument("--out_dir", default="", help="Directory to save predictions")
     args = parser.parse_args()
 
     # extract tool name
@@ -140,11 +141,11 @@ def main():
     config['normalize'] = args.normalize
     print("Configuration loaded:{}".format(config))
 
-    metrics = train_and_evaluate(df, args.model_type, config, args.site_type, tool)
+    metrics, prediction_dir = train_and_evaluate(df, args.model_type, config, args.site_type, tool, args.out_dir)
 
     print(f"✅ {args.site_type.upper()} [{args.model_type}] - F1: {metrics['f1']:.4f}, AUPR: {metrics['aupr']:.4f}")
 
-    merge_tss_tes_predictions(pred_dir="out/predictions", tool=tool, model_type=args.model_type)
+    merge_tss_tes_predictions(pred_dir=f"{args.out_dir}/predictions", tool=tool, model_type=args.model_type)
 
 if __name__ == "__main__":
     main()

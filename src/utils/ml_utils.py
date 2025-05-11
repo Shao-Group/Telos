@@ -15,7 +15,7 @@ def stratified_split(df, label_col='label', test_size=0.2, seed=42):
     # split based on chromosome 
     chromosomes = df['chrom'].unique()
     # train_chromosomes, val_chromosomes = train_test_split(chromosomes, test_size=test_size, random_state=seed)
-    train_chromosomes = ["chr" + str(i) for i in range(1,15)]
+    train_chromosomes = ["chr" + str(i) for i in range(1,16)]
     val_chromosomes = [x for x in chromosomes if x not in train_chromosomes]
     print(f"Train chromosomes: {train_chromosomes}")
     print(f"Validation chromosomes: {val_chromosomes}")
