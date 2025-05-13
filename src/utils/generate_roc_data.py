@@ -35,7 +35,7 @@ class PipelineConfig:
         self.data_dir    = self.data_home / "val-baseline"
         self.out_dir     = self.data_home / "updated-cov"
         self.roc_out_dir = self.out_dir  / "roc"
-        self.pred_dir = self.project_out_dir / self.data_name / "predictions"
+        self.pred_dir = self.project_out_dir / self.data_name / "predictions/transcripts"
         self.project_data_dir = self.project_data_dir / self.data_name
         
     
@@ -66,7 +66,7 @@ class TSSPipeline:
     def update_coverage(self, tool: str, model: str, universe: bool = False):
         """Invoke gtfformat update-cov for one (tool,model)."""
         data_file = self.cfg.data_dir / f"{tool}-chrom-filtered.gtf"
-        pred_name = f"{'universe_' if universe else f'{tool}_'}{model}_merged.tsv"
+        pred_name = f"{f'{tool}_universe_' if universe else f'{tool}_'}{model}_transcript_predictions.tsv"
         pred_file = self.cfg.pred_dir / pred_name
 
         suffix = f"universe-{model}" if universe else model
@@ -74,7 +74,7 @@ class TSSPipeline:
 
         logging.info(f"[{tool}/{suffix}] update-cov")
         self._run(
-            ["./gtfformat", "update-cov", str(data_file), str(pred_file), str(out_file)],
+            ["./gtfformat", "update-transcript-cov", str(data_file), str(pred_file), str(out_file)],
             cwd=self.cfg.home
         )
         return out_file, f"{tool}-{suffix}"
@@ -150,15 +150,6 @@ class TSSPipeline:
                 ["./gtfformat", "filter-chrom", str(gtf), str(self.cfg.val_chrom), str(out_gtf)],
                 cwd=self.cfg.home
             )
-
-            if tool == "isoquant":
-                # isoquant has a different format for the GTF
-                # we need to convert it to the standard GTF format
-                tpm_file = self.cfg.project_data_dir / f"{tool}.tpm"
-                self._run(
-                    ["./gtfformat", "update-tpm", str(out_gtf), str(tpm_file), str(out_gtf)],
-                    cwd=self.cfg.home
-                )
 
 
 

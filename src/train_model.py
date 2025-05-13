@@ -11,7 +11,7 @@ from config import config
 from utils.ml_utils import stratified_split, evaluate_model, load_model
 
 def train_and_evaluate(df, model_type, config, site_type, tool, out_dir):
-    drop = ["chrom", "position", "strand", "label" , "soft_clip_entropy", ""]
+    drop = ["chrom", "position", "strand", "label" , "soft_clip_entropy"]
     # drop += ['read_start_density', 'read_end_density', 'mean_mapq', 'std_mapq', 'nearest_splice_dist']
     features_to_normalize = ["total_reads", "read_start_density", "read_end_density", "soft_clip_mean", "soft_clip_max", "mean_mapq", "std_mapq", "strand_ratio", "coverage_before", "coverage_after", "delta_coverage", "nearest_splice_dist", "softclip_bias"]
 
@@ -38,6 +38,7 @@ def train_and_evaluate(df, model_type, config, site_type, tool, out_dir):
     report_dir = f"{out_dir}/reports/{site_type}"
     plot_dir = f"{out_dir}/plots/{site_type}"
     prediction_dir = f"{out_dir}/predictions/{site_type}"
+    prediction_home = f"{out_dir}/predictions"
     os.makedirs(prediction_dir, exist_ok=True)
     os.makedirs(model_dir, exist_ok=True)
     os.makedirs(report_dir, exist_ok=True)
@@ -101,6 +102,19 @@ def train_and_evaluate(df, model_type, config, site_type, tool, out_dir):
 
     pred_df.to_csv(os.path.join(prediction_dir, f"{tool}_{model_type}_predictions.tsv"), sep="\t", index=False)
 
+
+    # save the predictions with features used for training and test set 
+    X_df = df.loc[:, numeric_cols].copy()
+    y_prob = model.predict_proba(X_df)[:, 1]
+    X_df["site_type"] = site_type.upper()
+    X_df["chrom"] = df["chrom"].astype(str)
+    X_df["position"] = df["position"].astype(int)
+    X_df["probability"] = y_prob
+    X_df = X_df[ ["site_type", "chrom", "position"] + numeric_cols + ["probability"] ]
+
+    print(f"X features df.shape: {X_df.shape}")
+
+    X_df.to_csv(os.path.join(prediction_dir, f"{tool}_{model_type}_predictions_with_features.tsv"), sep="\t", index=False)
     return metrics, prediction_dir
 
 

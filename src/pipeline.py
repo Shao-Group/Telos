@@ -7,6 +7,9 @@ import sys
 import train_all
 import utils.generate_roc_data as generate_roc_data
 from utils.generate_pr_curves import plot_pr_curves
+import utils.gen_baseline_labels as generate_baseline_labels
+import train_coverage_model as train_coverage_model
+# from 
 
 def main():
     # Parse command line arguments
@@ -32,6 +35,12 @@ def main():
     os.makedirs(feature_dir, exist_ok=True)
     os.makedirs(train_dir, exist_ok=True)
     
+
+    # Generate baseline labels
+    print(f"🔍Generating baseline labels for {args.data_name}...")
+    generate_baseline_labels.main(args.data_name)
+    print("✅ Baseline labels generated!")
+
 
     print (f"🔍Feature Extraction: {assemblers} ---> {args.bam_file} ---> {args.candidate_sites_folder} ---> {args.data_name}")
     for assembler in assemblers:
@@ -75,6 +84,17 @@ def main():
     print("⏳ Training models...")
     train_all.main(log_dir, train_dir, out_dir)
     print("✅ Model training complete!")
+
+
+    transcirpt_prediction_home = f"{out_dir}/predictions/transcripts"
+    os.makedirs(transcirpt_prediction_home, exist_ok=True)
+    data_home = f"data/{args.data_name}"
+    models = ["xgboost", "randomforest"]
+    # Generate coverage files
+    generate_baseline_labels.main(args.data_name)
+    train_coverage_model.train_all_models(
+        assemblers, models, data_home, f"{out_dir}/predictions"
+    )
 
 
     # Generate ROC data

@@ -1,3 +1,5 @@
+import joblib
+import json
 import os
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
@@ -97,5 +99,18 @@ def load_model(model_type, config):
             n_jobs=-1,
             random_state=42
         )
+    else:
+        raise ValueError(f"Unsupported model type: {model_type}")
+
+
+def load_saved_model(model_type, model_dir):
+    if model_type == "xgboost":
+        # import xgboost as xgb
+        return json.load(open(f"{model_dir}/xgb_model.json"))
+    # elif model_type == "lightgbm":
+    #     import lightgbm as lgb
+    #     return lgb.LGBMClassifier()
+    elif model_type == "randomforest":
+        return joblib.load(f"{model_dir}/randomforest_model.joblib")
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
