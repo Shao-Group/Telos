@@ -34,7 +34,7 @@ def train_and_evaluate(df, model_type, config, site_type, tool, out_dir, val_chr
     y_pred = model.predict(X_val)
     y_prob = model.predict_proba(X_val)[:, 1]
 
-    model_dir = f"models/{site_type}"
+    model_dir = f"{out_dir}/models"
     report_dir = f"{out_dir}/reports/{site_type}"
     plot_dir = f"{out_dir}/plots/{site_type}"
     prediction_dir = f"{out_dir}/predictions/{site_type}"
@@ -45,11 +45,11 @@ def train_and_evaluate(df, model_type, config, site_type, tool, out_dir, val_chr
     os.makedirs(plot_dir, exist_ok=True)
 
     if model_type == "xgboost":
-        model.save_model(f"{model_dir}/xgb_model.json")
+        model.save_model(f"{model_dir}/{site_type}_xgb_model.json")
     elif model_type == "lightgbm":
-        model.booster_.save_model(f"{model_dir}/lgbm_model.txt")
+        model.booster_.save_model(f"{model_dir}/{site_type}_lgbm_model.txt")
     elif model_type == "randomforest":
-        dump(model, os.path.join(model_dir, "rf_model.joblib"))
+        dump(model, os.path.join(model_dir, f"{site_type}_rf_model.joblib"))
 
     metrics = evaluate_model(y_val, y_pred, y_prob, plot_path=f"{plot_dir}/{tool}_{model_type}_pr_curve.png")
 

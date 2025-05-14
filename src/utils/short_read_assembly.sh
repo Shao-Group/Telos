@@ -6,7 +6,7 @@ eval "$(conda shell.bash hook)"
 
 # ─── CONFIG ─────────────────────────────────────────────────────────────────────
 INPUT_DIR="/datadisk1/shared/data/encode10"
-OUT_DIR="/datadisk1/ixk5174/long_reads_compare/out/sr-out"
+OUT_DIR="/datadisk1/ixk5174/long_reads_compare/out/sr-out-refseq"
 SAMTOOLS_ENV="samtools-irtesam"
 SCALLOP2_ENV="scallop2"
 STRINGTIE_BIN="/datadisk1/ixk5174/tools/stringtie-3.0.0.Linux_x86_64/stringtie"

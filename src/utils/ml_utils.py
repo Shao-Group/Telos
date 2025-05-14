@@ -41,7 +41,7 @@ def stratified_split(df, label_col='label', validation_chrom_file='data_train/va
     # split based on chromosome 
     df['chrom_number'] = df['chrom'].apply(chrom_to_int)
     
-    train_mask = df['chrom_number'].between(1, 15)
+    train_mask = df['chrom_number'].between(1, 5)
     val_mask = ~train_mask
 
     df.drop(columns=['chrom_number'], inplace=True)
@@ -109,7 +109,7 @@ def load_model(model_type, config):
             colsample_bytree=config["colsample_bytree"],
             # use_label_encoder=False,
             objective="binary:logistic",
-            eval_metric="logloss"
+            eval_metric="auprc"
         )
     elif model_type == "lightgbm":
         import lightgbm as lgb

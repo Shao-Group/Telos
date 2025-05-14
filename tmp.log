@@ -1,0 +1,142 @@
+
+=== [isoquant/xgboost] merging TSS features ===
+
+=== [isoquant/xgboost] merging TES features ===
+
+=== [isoquant/xgboost] merging labels ===
+
+Final merged shape: (16143, 47)
+
+Accuracy: 0.7341
+ROC AUC:  0.7814
+AUPR:     0.8295
+
+Classification report:
+              precision    recall  f1-score   support
+
+           0     0.6777    0.6327    0.6544      1884
+           1     0.7674    0.8011    0.7839      2850
+
+    accuracy                         0.7341      4734
+   macro avg     0.7225    0.7169    0.7191      4734
+weighted avg     0.7317    0.7341    0.7323      4734
+
+0:
+{'precision': 0.6776577600909608, 'recall': 0.6326963906581741, 'f1-score': 0.6544057095800164, 'support': 1884.0}
+1:
+{'precision': 0.7673949579831932, 'recall': 0.8010526315789473, 'f1-score': 0.783862660944206, 'support': 2850.0}
+accuracy:
+0.7340515420363329
+macro avg:
+{'precision': 0.722526359037077, 'recall': 0.7168745111185607, 'f1-score': 0.7191341852621111, 'support': 4734.0}
+weighted avg:
+{'precision': 0.7316820553999728, 'recall': 0.7340515420363329, 'f1-score': 0.7323424040007896, 'support': 4734.0}
+
+=== [isoquant_universe/xgboost] merging TSS features ===
+
+=== [isoquant_universe/xgboost] merging TES features ===
+
+=== [isoquant_universe/xgboost] merging labels ===
+
+Final merged shape: (16150, 47)
+
+Accuracy: 0.7264
+ROC AUC:  0.7808
+AUPR:     0.8301
+
+Classification report:
+              precision    recall  f1-score   support
+
+           0     0.6648    0.6295    0.6467      1884
+           1     0.7636    0.7903    0.7767      2852
+
+    accuracy                         0.7264      4736
+   macro avg     0.7142    0.7099    0.7117      4736
+weighted avg     0.7243    0.7264    0.7250      4736
+
+0:
+{'precision': 0.6647982062780269, 'recall': 0.6295116772823779, 'f1-score': 0.6466739367502726, 'support': 1884.0}
+1:
+{'precision': 0.763550135501355, 'recall': 0.7903225806451613, 'f1-score': 0.7767057201929704, 'support': 2852.0}
+accuracy:
+0.7263513513513513
+macro avg:
+{'precision': 0.7141741708896909, 'recall': 0.7099171289637696, 'f1-score': 0.7116898284716215, 'support': 4736.0}
+weighted avg:
+{'precision': 0.7242662177106561, 'recall': 0.7263513513513513, 'f1-score': 0.7249785495835863, 'support': 4736.0}
+
+=== [stringtie/xgboost] merging TSS features ===
+Unmatched coverage → no TSS features for:
+Number of unmatched tss: 1378
+
+=== [stringtie/xgboost] merging TES features ===
+Unmatched after TSS→ no TES features for:
+Number of unmatched tes: 9
+
+=== [stringtie/xgboost] merging labels ===
+
+Final merged shape: (38245, 47)
+
+Accuracy: 0.7942
+ROC AUC:  0.8440
+AUPR:     0.7708
+
+Classification report:
+              precision    recall  f1-score   support
+
+           0     0.8126    0.8800    0.8450      6927
+           1     0.7533    0.6434    0.6940      3943
+
+    accuracy                         0.7942     10870
+   macro avg     0.7829    0.7617    0.7695     10870
+weighted avg     0.7911    0.7942    0.7902     10870
+
+0:
+{'precision': 0.8125833111170354, 'recall': 0.8800346470333478, 'f1-score': 0.8449650010395731, 'support': 6927.0}
+1:
+{'precision': 0.7532660332541568, 'recall': 0.6434187167131625, 'f1-score': 0.6940227055122419, 'support': 3943.0}
+accuracy:
+0.7942042318307267
+macro avg:
+{'precision': 0.782924672185596, 'recall': 0.7617266818732551, 'f1-score': 0.7694938532759075, 'support': 10870.0}
+weighted avg:
+{'precision': 0.7910664733421201, 'recall': 0.7942042318307267, 'f1-score': 0.79021196780459, 'support': 10870.0}
+
+=== [stringtie_universe/xgboost] merging TSS features ===
+Unmatched coverage → no TSS features for:
+Number of unmatched tss: 1373
+
+=== [stringtie_universe/xgboost] merging TES features ===
+Unmatched after TSS→ no TES features for:
+Number of unmatched tes: 11
+
+=== [stringtie_universe/xgboost] merging labels ===
+
+Final merged shape: (38254, 47)
+
+Accuracy: 0.7986
+ROC AUC:  0.8452
+AUPR:     0.7733
+
+Classification report:
+              precision    recall  f1-score   support
+
+           0     0.8170    0.8814    0.8480      6930
+           1     0.7582    0.6532    0.7018      3945
+
+    accuracy                         0.7986     10875
+   macro avg     0.7876    0.7673    0.7749     10875
+weighted avg     0.7957    0.7986    0.7950     10875
+
+0:
+{'precision': 0.8170144462279294, 'recall': 0.8813852813852814, 'f1-score': 0.8479800083298625, 'support': 6930.0}
+1:
+{'precision': 0.7581641659311562, 'recall': 0.6532319391634981, 'f1-score': 0.701797385620915, 'support': 3945.0}
+accuracy:
+0.7986206896551724
+macro avg:
+{'precision': 0.7875893060795428, 'recall': 0.7673086102743898, 'f1-score': 0.7748886969753888, 'support': 10875.0}
+weighted avg:
+{'precision': 0.7956659997202725, 'recall': 0.7986206896551724, 'f1-score': 0.7949510017471685, 'support': 10875.0}
+
+Saved metrics summary to out/nanopore_dRNA_NA12878/gencode/predictions/metrics_summary_tr_model.csv

@@ -31,6 +31,8 @@ def main():
 
     reference_file = f"data/{args.reference}.tsstes"
     chrom_mapping = "data/GRCh38_RefSeq2UCSC.txt" if args.reference == "refSeq" else None
+    chrom_mapping = None
+
     feature_dir = f"features/{args.data_name}"
     train_dir = f"data_train/{args.data_name}/{args.reference}"
     os.makedirs(feature_dir, exist_ok=True)
@@ -73,7 +75,8 @@ def main():
                  '-a', args.method,
                  '-b']  + mapping_cmd
     # Label candidates
-
+    print("⏳ Labeling candidates...")
+    print(" ".join(label_cmd))
     out = subprocess.run(label_cmd)
     # print(out.stdout)
     # print(out.stderr)
@@ -107,9 +110,11 @@ def main():
     validation_chromosome_file = f"{train_dir}/validation_chromosomes.txt"
     roc_out_dir = generate_roc_data.main(args.data_name, assemblers.copy(), reference_anno[args.reference], validation_chromosome_file, args.reference)
     plot_out_dir = f"{out_dir}/plots"
+
+    auc_file = f"{out_dir}/predictions/transcripts/auc.csv"
     # Plot PR curves
     for assembler in assemblers:
-        plot_pr_curves(roc_out_dir, plot_out_dir, assembler)
+        plot_pr_curves(roc_out_dir, plot_out_dir, assembler, auc_file)
 
 
 if __name__ == "__main__":

@@ -6,80 +6,99 @@ import re
 import joblib
 from xgboost import XGBClassifier
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.metrics import (
+    classification_report,
+    roc_auc_score,
+    average_precision_score,
+    accuracy_score
+)
 from utils.ml_utils import chrom_to_int
 
 def load_tmap_labels(tmap_path):
-    # read in with header row (skip any comment lines)
     df = pd.read_csv(tmap_path, sep='\t', comment='#', header=0)
-
-    # keep only the query‐ID and class code
-    df = df[['qry_id', 'class_code']]
-
-    # rename qry_id → transcript_id for consistency
-    df = df.rename(columns={'qry_id': 'transcript_id'})
-
-    # exact‐match '=' is positive (1), all others negative (0)
+    df = df[['qry_id', 'class_code']].rename(columns={'qry_id': 'transcript_id'})
     df['label'] = (df['class_code'] == '=').astype(int)
     return df[['transcript_id', 'label']]
 
-
-def train_model(tss_feat, tes_feat, cov_tsv, tmap_file, out_pred_file):
-    # load
+def train_model(tool, model,
+                tss_feat, tes_feat,
+                cov_tsv, tmap_file,
+                out_pred_file):
+    # load data
     df_tss   = pd.read_csv(tss_feat, sep='\t')
     df_tes   = pd.read_csv(tes_feat, sep='\t')
-    df_cov   = pd.read_csv(cov_tsv, sep='\t')
+    df_cov   = pd.read_csv(cov_tsv,    sep='\t')
     df_label = load_tmap_labels(tmap_file)
 
-    print(f"Merging TSS, TES, and coverage data...")
-    # print(f"TSS features columns: {df_tss.columns}")
-    # print(f"DF coverage columns: {df_cov.columns}")
-
-    # merge TSS
-    df = df_cov.merge(
+    print(f"\n=== [{tool}/{model}] merging TSS features ===")
+    m1 = df_cov.merge(
         df_tss,
         left_on=['tss_chrom','tss_pos'],
-        right_on=['chrom',   'position'],
-        how='inner'
+        right_on=['chrom','position'],
+        how='outer',
+        indicator=True
     )
+    unmatched_tss = m1[m1['_merge']=='left_only']
+    if not unmatched_tss.empty:
+        print("Unmatched coverage → no TSS features for:")
+        unmatched_tss_df = unmatched_tss[['tss_chrom','tss_pos', 'transcript_id']].drop_duplicates()
+        print(f"Number of unmatched tss: {unmatched_tss_df.shape[0]}")
+        # print(unmatched_tss_df.to_string(index=False))
+    df = m1[m1['_merge']=='both'].drop(columns=['_merge','chrom','position'])
 
-    print(f"After merging TSS: {df.shape}")
-    # merge TES
-    df = df.merge(
+    print(f"\n=== [{tool}/{model}] merging TES features ===")
+    m2 = df.merge(
         df_tes,
         left_on=['tes_chrom','tes_pos'],
-        right_on=['chrom',    'position'],
-        how='inner',
+        right_on=['chrom','position'],
+        how='outer',
+        indicator=True,
         suffixes=('','_tes')
     )
-    print(f"After merging TES: {df.shape}")
+    unmatched_tes = m2[m2['_merge']=='left_only']
+    if not unmatched_tes.empty:
+        print("Unmatched after TSS→ no TES features for:")
+        unmatched_tes_df = unmatched_tes[['tes_chrom','tes_pos', 'transcript_id']].drop_duplicates()
+        print(f"Number of unmatched tes: {unmatched_tes_df.shape[0]}")
 
-    # merge labels
-    df = df.merge(df_label, on='transcript_id', how='inner')
+    df = m2[m2['_merge']=='both'].drop(columns=['_merge','chrom','position'])
 
-    print(f"After merging labels: {df.shape}")
+    print(f"\n=== [{tool}/{model}] merging labels ===")
+    m3 = df.merge(
+        df_label,
+        on='transcript_id',
+        how='outer',
+        indicator=True
+    )
+    unmatched_lbl = m3[m3['_merge']=='left_only']
+    if not unmatched_lbl.empty:
+        print("Unmatched after TES→ no label for transcript_id:")
+        print(unmatched_lbl[['transcript_id']].drop_duplicates().to_string(index=False))
+    df = m3[m3['_merge']=='both'].drop(columns=['_merge'])
 
-    # mark chrom number 
+    print(f"\nFinal merged shape: {df.shape}")
+
+    # split train/test by chromosome
     df['chrom_num'] = df['tss_chrom'].apply(chrom_to_int)
+    train_mask = df['chrom_num'].between(1, 5)
+    X_train = df[train_mask]
+    X_test  = df[~train_mask]
+    y_train = X_train['label']
+    y_test  = X_test['label']
 
-    # split by chromosome
-    train_mask = df['chrom_num'].between(1, 15)
-    val_mask = ~train_mask
-    
-    train_df = df[train_mask]
-    test_df  = df[val_mask]
+    # select feature columns
+    drop = [
+        'chrom','position','chrom_tes','position_tes',
+        'tss_chrom','tss_pos','tes_chrom','tes_pos',
+        'site_type','site_type_tes',
+        'ref_id','chrom_num','transcript_id','label'
+    ]
+    features = [c for c in df.columns
+                if c not in drop and not c.startswith('tss_') and not c.startswith('tes_')]
+    X_train = X_train[features]
+    X_test  = X_test[features]
 
-    # prepare X/y
-    drop_cols = ['chrom','position','chrom_tes','position_tes','tss_chrom', 'tss_pos', 'tes_chrom', 'tes_pos',
-                 'site_type', 'site_type_tes',
-                 'ref_id','class_code','chrom_num', 'transcript_id','label']
-    features = [c for c in df.columns 
-                if c not in drop_cols and not c.startswith('tss_') and not c.startswith('tes_')]
-    X_train, y_train = train_df[features], train_df['label']
-    X_test,  y_test  = test_df[features],  test_df['label']
-
-    # train classifier
-    clf = RandomForestClassifier(n_estimators=400, random_state=42)
+    # train
     clf = XGBClassifier(
         n_estimators=400,
         max_depth=6,
@@ -92,54 +111,87 @@ def train_model(tss_feat, tes_feat, cov_tsv, tmap_file, out_pred_file):
     )
     clf.fit(X_train, y_train)
 
-    # eval on test set
+    # predict & evaluate
     y_pred = clf.predict(X_test)
     y_prob = clf.predict_proba(X_test)[:,1]
 
-    print("=== Test set classification report ===")
-    print(classification_report(y_test, y_pred, digits=4))
-    print(f"ROC AUC on test set: {roc_auc_score(y_test, y_prob):.4f}")
-    print(f"AUPR on test set: {roc_auc_score(y_test, y_prob):.4f}")
+    acc   = accuracy_score(y_test, y_pred)
+    roc   = roc_auc_score(y_test, y_prob)
+    aupr  = average_precision_score(y_test, y_prob)
+    report_dict = classification_report(y_test, y_pred, digits=4, output_dict=True)
 
-    # save predicted transcript probabilities
-    pred_df = test_df.copy()
-    pred_df['pred_prob'] = y_prob
-    pred_df['pred_label'] = y_pred
-    pred_df = pred_df[['transcript_id', 'pred_prob', 'pred_label']]
-    pred_df.to_csv(f"{out_pred_file}", sep='\t', index=False)
-    
-    # joblib.dump(clf, output_model)
-    # print(f"Model saved to {output_model}")
+    print(f"\nAccuracy: {acc:.4f}")
+    print(f"ROC AUC:  {roc:.4f}")
+    print(f"AUPR:     {aupr:.4f}")
+    print("\nClassification report:")
+    print(classification_report(y_test, y_pred, digits=4))
+
+    print("F1 score (macro):", report_dict['macro avg']['f1-score'])
+    print("Precision (macro):", report_dict['macro avg']['precision'])
+    print("Recall (macro):", report_dict['macro avg']['recall'])
+
+    # save predictions
+    pred_df = X_test.copy()
+    pred_df['transcript_id'] = df.loc[~train_mask, 'transcript_id'].values
+    pred_df['pred_prob']      = y_prob
+    pred_df['pred_label']     = y_pred
+    pred_df = pred_df[['transcript_id','pred_prob','pred_label']]
+    pred_df.to_csv(out_pred_file, sep='\t', index=False)
+
+    # return metrics
+    return {
+        'tool': tool,
+        'model': model,
+        'accuracy': acc,
+        'roc_auc': roc,
+        'aupr': aupr,
+        'f1_macro': report_dict['macro avg']['f1-score'],
+        'precision_macro': report_dict['macro avg']['precision'],
+        'recall_macro': report_dict['macro avg']['recall']
+    }
 
 def train_all_models(tools, models, data_home, pred_folder):
-    """
-    Train all models for all tools.
-    """
-    # tools.append("universe")
+    metrics_list = []
     for tool in tools:
         for model in models:
-            pred_dir = f"{pred_folder}/transcripts/{tool}_{model}_transcript_predictions.tsv"
-            tss_feat = f"{pred_folder}/tss/{tool}_{model}_predictions_with_features.tsv"
-            tes_feat = f"{pred_folder}/tes/{tool}_{model}_predictions_with_features.tsv"
-            cov_tsv = f"{data_home}/{tool}-cov.tsv"
+            pred_file = f"{pred_folder}/transcripts/{tool}_{model}_transcript_predictions.tsv"
+            tss_feat  = f"{pred_folder}/tss/{tool}_{model}_predictions_with_features.tsv"
+            tes_feat  = f"{pred_folder}/tes/{tool}_{model}_predictions_with_features.tsv"
+            cov_tsv   = f"{data_home}/{tool}-cov.tsv"
             tmap_file = f"{data_home}/{tool}.{tool}.gtf.tmap"
-            train_model(tss_feat, tes_feat, cov_tsv, tmap_file, pred_dir)
-            
-            pred_dir_universe = f"{pred_folder}/transcripts/{tool}_universe_{model}_transcript_predictions.tsv"
-            tss_feat_universe = f"{pred_folder}/tss/universe_{model}_predictions_with_features.tsv"
-            tes_feat_universe = f"{pred_folder}/tes/universe_{model}_predictions_with_features.tsv"
-            train_model(tss_feat_universe, tes_feat_universe, cov_tsv, tmap_file, pred_dir_universe)
+            m = train_model(tool, model,
+                            tss_feat, tes_feat,
+                            cov_tsv, tmap_file,
+                            pred_file)
+            metrics_list.append(m)
+            # universe variant
+            pred_file_u = f"{pred_folder}/transcripts/{tool}_universe_{model}_transcript_predictions.tsv"
+            tss_feat_u  = f"{pred_folder}/tss/universe_{model}_predictions_with_features.tsv"
+            tes_feat_u  = f"{pred_folder}/tes/universe_{model}_predictions_with_features.tsv"
+            m = train_model(tool + "_universe", model,
+                            tss_feat_u, tes_feat_u,
+                            cov_tsv, tmap_file,
+                            pred_file_u)
+            metrics_list.append(m)
+
+    metrics_out = f"{pred_folder}/metrics_summary_tr_model.csv"
+    # save metrics summary
+    dfm = pd.DataFrame(metrics_list)
+    dfm.to_csv(metrics_out, index=False)
+    print(f"\nSaved metrics summary to {metrics_out}")
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(
-        description="Train classifier with chr1–15 as train, others as test"
-    )
-    p.add_argument("--tss-features", required=True)
-    p.add_argument("--tes-features", required=True)
-    p.add_argument("--cov-tsv",      required=True)
-    p.add_argument("--tmap-file",    required=True)
+    p = argparse.ArgumentParser()
+    p.add_argument("--data-home",   required=True)
     p.add_argument("--pred-folder", required=True)
+    p.add_argument("--tools",       nargs='+', required=True)
+    p.add_argument("--models",      nargs='+', required=True)
+    p.add_argument("--metrics-out", required=True,
+                   help="Path to save CSV summary of accuracy/ROC/AUPR")
     args = p.parse_args()
-    train_model(args.tss_features, args.tes_features,
-         args.cov_tsv, args.tmap_file,
-         args.pred_folder)
+    train_all_models(
+        tools=args.tools,
+        models=args.models,
+        data_home=args.data_home,
+        pred_folder=args.pred_folder
+    )

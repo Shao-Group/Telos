@@ -16,7 +16,7 @@ class PipelineConfig:
     val_chrom: Path
     anno_name: str 
     pred_dir: Path = field(init = False) 
-    
+    auc_file: Path = field(init = False)
     # Repositories / tools
     home: Path = Path("/datadisk1/ixk5174/tools/rnaseqtools/gtfformat")
     home_cuff: Path = Path("/datadisk1/ixk5174/tools/rnaseqtools/gtfcuff")
@@ -44,6 +44,7 @@ class PipelineConfig:
         self.project_data_dir = self.project_data_dir / self.data_name
         self.ref_anno = self.ref_anno.absolute()
         self.val_chrom = self.val_chrom.absolute()
+        self.auc_file = self.pred_dir / f"auc.csv"
 
 class TSSPipeline:
     def __init__(self, cfg: PipelineConfig):
@@ -103,6 +104,33 @@ class TSSPipeline:
                 cwd=self.cfg.home_cuff,
                 stdout=out_fh
             )
+    
+    def get_aupr(self, label: str):
+        """Run gtfcuff roc on a .tmap → auc value"""
+        tmap = self.cfg.out_dir / f"{label}.{label}-updated-cov.gtf.tmap" 
+        tmp_file = self.cfg.out_dir / f"{label}-updated-cov.auc"
+        logging.info(f"[{label}] gtfcuff auc → {tmp_file.name}")
+        with tmp_file.open("w") as out_fh:
+            self._run(
+                ["./gtfcuff", "auc", str(tmap), str(self.multi_exon_count)],
+                cwd=self.cfg.home_cuff,
+                stdout=out_fh
+            )
+        
+        # parse the auc value
+        with open(tmp_file, "r") as f:
+            match = re.search(r"auc\s*=\s*(\d+\.?\d*)", f.read())
+            if match:
+                auc = float(match.group(1))
+                logging.info(f"[{label}] auc = {auc}")
+            else:
+                auc = None
+                exit(55)
+        
+        # append to the auc file
+        with self.cfg.auc_file.open("a") as f:
+            f.write(f"{label},{auc}\n")
+
 
     def process_model(self, tool: str, model: str):
         """Full pipeline for one tool/model pair."""
@@ -113,6 +141,7 @@ class TSSPipeline:
             self.run_gffcompare(gtf, label, cwd=self.cfg.out_dir)
             # 3) ROC
             self.generate_roc(label)
+            self.get_aupr(label)
 
     def process_all(self):
         """Run build + all tool/model combinations + baseline."""
@@ -145,6 +174,29 @@ class TSSPipeline:
                     cwd=self.cfg.home_cuff,
                     stdout=out_fh
                 )
+            
+            # AUC
+            tmp_file = self.cfg.out_dir / f"{label}.auc"    
+            logging.info(f"[{label}] gtfcuff auc → {tmp_file.name}")
+            with tmp_file.open("w") as out_fh:
+                self._run(
+                    ["./gtfcuff", "auc", str(tmap), str(self.multi_exon_count)],
+                    cwd=self.cfg.home_cuff,
+                    stdout=out_fh
+                )
+            # parse the auc value
+            with open(tmp_file, "r") as f:
+                match = re.search(r"auc\s*=\s*(\d+\.?\d*)", f.read())
+                if match:
+                    auc = float(match.group(1))
+                    logging.info(f"[{label}] auc = {auc}")
+                else:
+                    auc = None
+                    exit(55)
+            # append to the auc file
+            with self.cfg.auc_file.open("a") as f:
+                f.write(f"{label},{auc}\n")
+            
     
     def generate_baseline(self):
         """Filter the baseline GTFs with validation chromosomes."""
