@@ -10,12 +10,12 @@ from config import config
 
 from utils.ml_utils import stratified_split, evaluate_model, load_model
 
-def train_and_evaluate(df, model_type, config, site_type, tool, out_dir):
+def train_and_evaluate(df, model_type, config, site_type, tool, out_dir, val_chrom_file):
     drop = ["chrom", "position", "strand", "label" , "soft_clip_entropy"]
     # drop += ['read_start_density', 'read_end_density', 'mean_mapq', 'std_mapq', 'nearest_splice_dist']
     features_to_normalize = ["total_reads", "read_start_density", "read_end_density", "soft_clip_mean", "soft_clip_max", "mean_mapq", "std_mapq", "strand_ratio", "coverage_before", "coverage_after", "delta_coverage", "nearest_splice_dist", "softclip_bias"]
 
-    X_train, X_val, y_train, y_val = stratified_split(df)
+    X_train, X_val, y_train, y_val = stratified_split(df, validation_chrom_file=val_chrom_file)
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
     numeric_cols = [col for col in numeric_cols if col not in drop]
     X_train = X_train[numeric_cols]
@@ -144,6 +144,7 @@ def main():
     parser.add_argument("--model_type", required=True, choices=["xgboost", "lightgbm", "randomforest"])
     parser.add_argument("--normalize", action='store_true', default=False, help="Normalize features")
     parser.add_argument("--out_dir", default="", help="Directory to save predictions")
+    parser.add_argument("--val_chrom_file", default="", help="File containing validation chromosomes")
     args = parser.parse_args()
 
     # extract tool name
@@ -155,7 +156,7 @@ def main():
     config['normalize'] = args.normalize
     print("Configuration loaded:{}".format(config))
 
-    metrics, prediction_dir = train_and_evaluate(df, args.model_type, config, args.site_type, tool, args.out_dir)
+    metrics, prediction_dir = train_and_evaluate(df, args.model_type, config, args.site_type, tool, args.out_dir, args.val_chrom_file)
 
     print(f"✅ {args.site_type.upper()} [{args.model_type}] - F1: {metrics['f1']:.4f}, AUPR: {metrics['aupr']:.4f}")
 

@@ -58,6 +58,16 @@ python src/train_all.py
 ### 4. Summarize Metrics
 
 All the stats, summarization and plot generation available at src/data-analysis.ipynb
+
+
+
+### Data Names
+
+  - nanopore_cDNA_NA12878  
+  - pacbio_ENCFF450VAU  
+  - nanopore_dRNA_NA12878   
+  - pacbio_ENCFF694DIE  
+  - SRR307903_hisat
 ---
 
 ## ✍️ Author

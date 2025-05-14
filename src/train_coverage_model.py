@@ -7,6 +7,7 @@ import joblib
 from xgboost import XGBClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, roc_auc_score
+from utils.ml_utils import chrom_to_int
 
 def load_tmap_labels(tmap_path):
     # read in with header row (skip any comment lines)
@@ -22,11 +23,6 @@ def load_tmap_labels(tmap_path):
     df['label'] = (df['class_code'] == '=').astype(int)
     return df[['transcript_id', 'label']]
 
-
-def chrom_to_int(c):
-    """Extract integer chromosome (e.g. 'chr12' → 12, 'X' → None)."""
-    m = re.search(r'(\d+)$', str(c))
-    return int(m.group(1)) if m else None
 
 def train_model(tss_feat, tes_feat, cov_tsv, tmap_file, out_pred_file):
     # load
@@ -66,10 +62,12 @@ def train_model(tss_feat, tes_feat, cov_tsv, tmap_file, out_pred_file):
     # mark chrom number 
     df['chrom_num'] = df['tss_chrom'].apply(chrom_to_int)
 
-    # print(df.columns)
     # split by chromosome
-    train_df = df[df['chrom_num'].notnull() & (df['chrom_num'] <= 15)]
-    test_df  = df[~(df['chrom_num'].notnull() & (df['chrom_num'] <= 15))]
+    train_mask = df['chrom_num'].between(1, 15)
+    val_mask = ~train_mask
+    
+    train_df = df[train_mask]
+    test_df  = df[val_mask]
 
     # prepare X/y
     drop_cols = ['chrom','position','chrom_tes','position_tes','tss_chrom', 'tss_pos', 'tes_chrom', 'tes_pos',

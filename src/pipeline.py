@@ -9,7 +9,7 @@ import utils.generate_roc_data as generate_roc_data
 from utils.generate_pr_curves import plot_pr_curves
 import utils.gen_baseline_labels as generate_baseline_labels
 import train_coverage_model as train_coverage_model
-# from 
+
 
 def main():
     # Parse command line arguments
@@ -18,6 +18,7 @@ def main():
     parser.add_argument("-b","--bam_file", type=str, required=True, help="Path to the BAM file.")
     parser.add_argument("-c","--candidate_sites_folder", type=str, help="Path to the candidate sites folder.")
     parser.add_argument("-d","--data_name", type=str, required=True, help="Name of the data set.")
+    parser.add_argument("-r" , "--reference", type=str, default="refSeq", help="Path to the reference file.")
     args = parser.parse_args()
 
     if args.candidate_sites_folder is None:
@@ -25,20 +26,25 @@ def main():
 
     # Initialize configuration
     short_read_assemblers = ["stringtie", "scallop2"]
-    long_read_assemblers = ["stringtie","isoquant"]
+    long_read_assemblers = ["stringtie", "isoquant"]
     assemblers = short_read_assemblers if args.method == "short" else long_read_assemblers
-    
-    reference_file = "data/refSeq.tsstes"
-    chrom_mapping = "data/GRCh38_RefSeq2UCSC.txt"
+
+    reference_file = f"data/{args.reference}.tsstes"
+    chrom_mapping = "data/GRCh38_RefSeq2UCSC.txt" if args.reference == "refSeq" else None
     feature_dir = f"features/{args.data_name}"
-    train_dir = f"data_train/{args.data_name}"
+    train_dir = f"data_train/{args.data_name}/{args.reference}"
     os.makedirs(feature_dir, exist_ok=True)
     os.makedirs(train_dir, exist_ok=True)
-    
+
+    reference_anno = {
+        "refSeq": "data/GRCh38_refSeq.gtf",
+        "gencode": "data/GRCh38_gencode.gtf",
+        "ensembl": "data/GRCh38_ensembl.gtf"
+    }
 
     # Generate baseline labels
     print(f"🔍Generating baseline labels for {args.data_name}...")
-    generate_baseline_labels.main(args.data_name)
+    generate_baseline_labels.main(args.data_name, assemblers, reference_anno[args.reference])
     print("✅ Baseline labels generated!")
 
 
@@ -58,13 +64,14 @@ def main():
     
     
     print("🔍 Feature extraction completed for all assemblers.")
+    mapping_cmd = ['-m', chrom_mapping] if chrom_mapping else []
     label_cmd = ['python', 'src/label_candidates.py', 
                  '-f', feature_dir,
                  '-o', train_dir,
                  '-r', reference_file,
-                 '-m', chrom_mapping,
                  '-d', '50',
-                 '-b']
+                 '-a', args.method,
+                 '-b']  + mapping_cmd
     # Label candidates
 
     out = subprocess.run(label_cmd)
@@ -77,29 +84,29 @@ def main():
         print("✅ Candidate labeling complete!")
     
     # Train models
-    out_dir = f"out/{args.data_name}"
+    out_dir = f"out/{args.data_name}/{args.reference}"
     os.makedirs(out_dir, exist_ok=True)
-    log_dir = f"logs/{args.data_name}"
+    log_dir = f"logs/{args.data_name}/{args.reference}"
     os.makedirs(log_dir, exist_ok=True)
     print("⏳ Training models...")
-    train_all.main(log_dir, train_dir, out_dir)
+    train_all.main(assemblers.copy(), log_dir, train_dir, out_dir)
     print("✅ Model training complete!")
 
 
-    transcirpt_prediction_home = f"{out_dir}/predictions/transcripts"
-    os.makedirs(transcirpt_prediction_home, exist_ok=True)
+    transcript_prediction_home = f"{out_dir}/predictions/transcripts"
+    os.makedirs(transcript_prediction_home, exist_ok=True)
     data_home = f"data/{args.data_name}"
     models = ["xgboost", "randomforest"]
-    # Generate coverage files
-    generate_baseline_labels.main(args.data_name)
+    
     train_coverage_model.train_all_models(
-        assemblers, models, data_home, f"{out_dir}/predictions"
+        assemblers.copy(), models, data_home, f"{out_dir}/predictions"
     )
 
-
+    
     # Generate ROC data
-    roc_out_dir = generate_roc_data.main(args.data_name)
-    plot_out_dir = f"out/{args.data_name}/plots"
+    validation_chromosome_file = f"{train_dir}/validation_chromosomes.txt"
+    roc_out_dir = generate_roc_data.main(args.data_name, assemblers.copy(), reference_anno[args.reference], validation_chromosome_file, args.reference)
+    plot_out_dir = f"{out_dir}/plots"
     # Plot PR curves
     for assembler in assemblers:
         plot_pr_curves(roc_out_dir, plot_out_dir, assembler)

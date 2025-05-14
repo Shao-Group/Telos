@@ -5,12 +5,18 @@ import sys
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List
-
+import re
+from collections import defaultdict
+import logging
 
 @dataclass
 class PipelineConfig:
     data_name: str
+    ref_anno: Path
+    val_chrom: Path
+    anno_name: str 
     pred_dir: Path = field(init = False) 
+    
     # Repositories / tools
     home: Path = Path("/datadisk1/ixk5174/tools/rnaseqtools/gtfformat")
     home_cuff: Path = Path("/datadisk1/ixk5174/tools/rnaseqtools/gtfcuff")
@@ -23,9 +29,8 @@ class PipelineConfig:
     project_data_dir: Path = Path("/datadisk1/ixk5174/tools/tss-tes-project/data/")
     out_dir: Path = field(init=False)
     roc_out_dir: Path = field(init=False)
-    ref_anno: Path = Path("/datadisk1/ixk5174/long_reads_compare/anno/refSeq_anno.gtf")
-    val_chrom: Path = Path("/datadisk1/ixk5174/tools/tss-tes-project/data_train/validation_chromosomes.txt")
-
+    # ref_anno: Path = Path("/datadisk1/ixk5174/long_reads_compare/anno/refSeq_anno.gtf")
+    # val_chrom: Path = Path(f"/datadisk1/ixk5174/tools/tss-tes-project/data_train/")
     # Parameters
     tools: List[str]  = field(default_factory=lambda: ["stringtie", "isoquant"])
     models: List[str] = field(default_factory=lambda: ["xgboost", "randomforest"])
@@ -35,10 +40,10 @@ class PipelineConfig:
         self.data_dir    = self.data_home / "val-baseline"
         self.out_dir     = self.data_home / "updated-cov"
         self.roc_out_dir = self.out_dir  / "roc"
-        self.pred_dir = self.project_out_dir / self.data_name / "predictions/transcripts"
+        self.pred_dir = self.project_out_dir / self.data_name / self.anno_name / "predictions/transcripts"
         self.project_data_dir = self.project_data_dir / self.data_name
-        
-    
+        self.ref_anno = self.ref_anno.absolute()
+        self.val_chrom = self.val_chrom.absolute()
 
 class TSSPipeline:
     def __init__(self, cfg: PipelineConfig):
@@ -46,6 +51,8 @@ class TSSPipeline:
         # ensure output dirs exist
         self.cfg.out_dir.mkdir(parents=True, exist_ok=True)
         self.cfg.roc_out_dir.mkdir(parents=True, exist_ok=True)
+        self.multi_exon_count = self._count_multi_exon_transcripts()
+
 
     def _run(self, cmd: List[str], cwd: Path = None, **kwargs):
         """Run a subprocess with logging and error checking."""
@@ -92,7 +99,7 @@ class TSSPipeline:
         logging.info(f"[{label}] gtfcuff roc → {roc.name}")
         with roc.open("w") as out_fh:
             self._run(
-                ["./gtfcuff", "roc", str(tmap), "189216", "cov"],
+                ["./gtfcuff", "roc", str(tmap), str(self.multi_exon_count), "cov"],
                 cwd=self.cfg.home_cuff,
                 stdout=out_fh
             )
@@ -134,7 +141,7 @@ class TSSPipeline:
             # print(f"roc: {out_fh}")
             with roc_out_file.open("w") as out_fh:
                 self._run(
-                    ["./gtfcuff", "roc", str(tmap), "189216", "cov"],
+                    ["./gtfcuff", "roc", str(tmap), str(self.multi_exon_count), "cov"],
                     cwd=self.cfg.home_cuff,
                     stdout=out_fh
                 )
@@ -150,13 +157,36 @@ class TSSPipeline:
                 ["./gtfformat", "filter-chrom", str(gtf), str(self.cfg.val_chrom), str(out_gtf)],
                 cwd=self.cfg.home
             )
+    
+    def _count_multi_exon_transcripts(self) -> int:
+        """
+        Parse the reference GTF and return the number of transcripts
+        that have more than one 'exon' entry.
+        """
+        exon_counts = defaultdict(int)
+        with open(self.cfg.ref_anno, 'r') as gtf:
+            for line in gtf:
+                if line.startswith('#'):
+                    continue
+                cols = line.rstrip('\n').split('\t')
+                if cols[2] != 'exon':
+                    continue
+                attrs = cols[8]
+                m = re.search(r'transcript_id\s+"([^"]+)"', attrs)
+                if m:
+                    exon_counts[m.group(1)] += 1
+
+        multi = sum(1 for cnt in exon_counts.values() if cnt > 1)
+        logging.info(f"Reference has {multi} multi-exon transcripts")
+        return multi
 
 
 
 
-def main(data_name: str):
+def main(data_name: str, tools: List[str], annotation: str, val_chrom_file: str, anno_name: str):
+
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    cfg = PipelineConfig(data_name = data_name)
+    cfg = PipelineConfig(data_name = data_name, tools=tools, ref_anno=Path(annotation), val_chrom=Path(val_chrom_file), anno_name= anno_name)
     pipeline = TSSPipeline(cfg)
     try:
         pipeline.process_all()

@@ -3,8 +3,9 @@ import os
 from datetime import datetime
 import pandas as pd 
 
-def main(log_dir, train_dir, out_dir):
-    tools = ["stringtie", "isoquant", "universe"]
+def main(tools, log_dir, train_dir, out_dir):
+    # tools = ["stringtie", "isoquant", "universe"]
+    tools.append("universe")
     site_types = ["tss", "tes"]
     models = ["xgboost", "randomforest"]
     # models = ["randomforest"]
@@ -56,7 +57,8 @@ def main(log_dir, train_dir, out_dir):
                         "--config", config_file,
                         "--site_type", site,
                         "--model_type", model_type,
-                        "--out_dir", out_dir
+                        "--out_dir", out_dir,
+                        "--val_chrom_file", os.path.join(train_dir, "validation_chromosomes.txt")
                     ]
 
                     print(f"🔁 Running: {site_tag}")

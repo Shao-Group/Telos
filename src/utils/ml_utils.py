@@ -11,23 +11,52 @@ from sklearn.metrics import (
 )
 import matplotlib.pyplot as plt
 import numpy as np
+import re
 
-def stratified_split(df, label_col='label', test_size=0.2, seed=42):
+
+def normalize_chrom(c):
+    """
+    Turn any of 'chr1','1','CHR1' → '1', but leave 'GL000194.1','X','MT' alone.
+    """
+    s = str(c)
+    # remove leading 'chr' (case-insensitive)
+    s = re.sub(r'(?i)^chr', '', s)
+    return s
+
+def chrom_to_int(c):
+    """
+    Return the chromosome as an int if c is exactly '1'…'22'; else None.
+    """
+    s = str(c).lstrip('chr').upper()
+    # fullmatch: entire string must be 1–2 digits
+    if re.fullmatch(r'[1-9]|1[0-9]|2[0-2]', s):
+        val = int(s)
+        # only accept 1–15 for your use-case
+        return val
+    return None
+
+
+def stratified_split(df, label_col='label', validation_chrom_file='data_train/validation_chromosomes.txt'):
     # X_train, X_val, y_train, y_val =  train_test_split(df, df[label_col], test_size=test_size, stratify=df[label_col], random_state=seed)
     # split based on chromosome 
-    chromosomes = df['chrom'].unique()
-    # train_chromosomes, val_chromosomes = train_test_split(chromosomes, test_size=test_size, random_state=seed)
-    train_chromosomes = ["chr" + str(i) for i in range(1,16)]
-    val_chromosomes = [x for x in chromosomes if x not in train_chromosomes]
-    print(f"Train chromosomes: {train_chromosomes}")
-    print(f"Validation chromosomes: {val_chromosomes}")
-    train_mask = df['chrom'].isin(train_chromosomes)
-    val_mask = df['chrom'].isin(val_chromosomes)
+    df['chrom_number'] = df['chrom'].apply(chrom_to_int)
+    
+    train_mask = df['chrom_number'].between(1, 15)
+    val_mask = ~train_mask
+
+    df.drop(columns=['chrom_number'], inplace=True)
+
     X_train = df[train_mask].drop(columns=[label_col])
     X_val = df[val_mask].drop(columns=[label_col])
     y_train = df[train_mask][label_col]
     y_val = df[val_mask][label_col]
 
+    validation_chromosomes = X_val['chrom'].unique().tolist()
+    with open (validation_chrom_file, 'w') as f:
+        f.write('\n'.join(validation_chromosomes))
+
+    print(f"Validation chromosomes saved to {validation_chromosomes} : {validation_chrom_file}")
+    print(f"Training chromosomes: {X_train['chrom'].unique()}")
     print(f"Train size: {X_train.shape}, Validation size: {X_val.shape}")
     print(f"Train label distribution: {y_train.value_counts(normalize=True)}")
     print(f"Validation label distribution: {y_val.value_counts(normalize=True)}")

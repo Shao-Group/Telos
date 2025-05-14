@@ -10,6 +10,7 @@ from typing import List
 @dataclass
 class TranscriptLabelingConfig:
     data_name: str
+    ref_anno: Path 
     pred_dir: Path = field(init = False) 
     # Repositories / tools
     home: Path = Path("/datadisk1/ixk5174/tools/rnaseqtools/gtfformat")
@@ -20,9 +21,7 @@ class TranscriptLabelingConfig:
     
     data_home: Path = Path("/datadisk1/ixk5174/tools/tss-tes-project/data/")
     out_dir: Path = field(init=False)
-    ref_anno: Path = Path("/datadisk1/ixk5174/long_reads_compare/anno/refSeq_anno.gtf")
-    val_chrom: Path = Path("/datadisk1/ixk5174/tools/tss-tes-project/data_train/validation_chromosomes.txt")
-
+    
     # Parameters
     tools: List[str]  = field(default_factory=lambda: ["stringtie", "isoquant"])
     models: List[str] = field(default_factory=lambda: ["xgboost", "randomforest"])
@@ -30,7 +29,8 @@ class TranscriptLabelingConfig:
     def __post_init__(self):
         self.data_home = self.data_home / self.data_name
         self.out_dir     = self.data_home / "gffcmp"
-    
+        self.ref_anno = self.ref_anno.absolute()
+        # self.val_chrom = self.val_chrom / f"{self.anno_name}_validation_chromosomes.txt"    
 
 class TranscriptLabelingPipeline:
     def __init__(self, cfg: TranscriptLabelingConfig):
@@ -63,6 +63,16 @@ class TranscriptLabelingPipeline:
             ["./gtfformat", "get-cov", str(out_gtf), str(cov_tsv)],
             cwd=self.cfg.home
         )
+    
+    def generate_candidate_sites(self, tool: str):
+        """Generate candidate sites for the tool."""
+        input_gtf = self.cfg.data_home / f"{tool}.gtf"
+        candidate_file = self.cfg.data_home / f"{self.cfg.data_name}_{tool}_candidates.tsv"
+        with open (candidate_file, "w") as cf:
+            self._run(
+                ["./gtfformat", "TSSTES", str(input_gtf)], stdout=cf,
+                cwd=self.cfg.home
+            )
 
     def run_gffcompare(self, gtf: Path, label: str, cwd: Path):
         """Run gffcompare inside the conda env."""
@@ -70,7 +80,6 @@ class TranscriptLabelingPipeline:
         cmd = self._gffcompare_cmd("-r", str(self.cfg.ref_anno), "-o", label, str(gtf))
         self._run(cmd, cwd=cwd)
 
-    
     def process_model(self, tool: str):
         """Full pipeline for one tool/model pair."""
         out_gtf = self.cfg.data_home / f"{tool}.gtf"
@@ -86,6 +95,7 @@ class TranscriptLabelingPipeline:
             )
 
         self.get_coverage(tool)
+        self.generate_candidate_sites(tool)
         # 2) gffcompare
         self.run_gffcompare(out_gtf, f"{tool}", cwd=self.cfg.out_dir)
            
@@ -97,9 +107,9 @@ class TranscriptLabelingPipeline:
 
 
 
-def main(data_name: str):
+def main(data_name: str, tools: List[str], reference: str):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    cfg = TranscriptLabelingConfig(data_name = data_name)
+    cfg = TranscriptLabelingConfig(data_name = data_name, tools=tools, ref_anno=Path(reference))
     pipeline = TranscriptLabelingPipeline(cfg)
     try:
         pipeline.process_all()
