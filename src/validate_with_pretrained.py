@@ -7,14 +7,14 @@ import matplotlib.pyplot as plt
 from joblib import dump
 from sklearn.preprocessing import StandardScaler
 from config import Config, load_config
-from ml_utils import stratified_split, evaluate_model, load_model, load_tmap_labels, chrom_to_int
+from ml_utils import stratified_split, evaluate_model, load_model, load_tmap_labels, chrom_to_int, load_saved_model
 from xgboost import XGBClassifier
 from sklearn.metrics import (
     accuracy_score, roc_auc_score, average_precision_score,
     classification_report
 )
 
-def train_and_evaluate_stage2(df_tss, df_tes, project_config, model_type):
+def validate_stage2(df_tss, df_tes, project_config, model_type, pretrained_model):
     df_cov = pd.read_csv(project_config.cov_file, sep="\t")
     df_label = load_tmap_labels(project_config.tmap_file)
 
@@ -51,7 +51,8 @@ def train_and_evaluate_stage2(df_tss, df_tes, project_config, model_type):
             random_state=42,
             eval_metric='aucpr'
         )
-    clf.fit(X_train, y_train)
+    clf.load_model(pretrained_model)
+
     y_pred = clf.predict(X_test)
     y_prob = clf.predict_proba(X_test)[:, 1]
 
@@ -84,7 +85,7 @@ def train_and_evaluate_stage2(df_tss, df_tes, project_config, model_type):
     pred_df.to_csv(os.path.join(project_config.predictions_output_dir, f"{model_type}_stage2_predictions.csv"),sep="\t" , index=False)
 
 
-def train_and_evaluate_stage1(df, model_type, model_config, project_config, site_type):
+def validate_stage1(df, model_type, model_config, project_config, pretrained_model, site_type):
     drop = ["chrom", "position", "strand", "label" , "soft_clip_entropy"]
 
     X_train, X_val, y_train, y_val = stratified_split(df, validation_chrom_file=project_config.validation_chromosomes_file)
@@ -93,8 +94,7 @@ def train_and_evaluate_stage1(df, model_type, model_config, project_config, site
     X_train = X_train[numeric_cols]
     X_val = X_val[numeric_cols]
 
-    model = load_model(model_type, model_config)
-    model.fit(X_train, y_train)
+    model = load_saved_model(model_type, pretrained_model, model_config)
 
     y_pred = model.predict(X_val)
     y_prob = model.predict_proba(X_val)[:, 1]
@@ -138,26 +138,29 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-config", required=True)
     parser.add_argument("--model-config-folder", required=True, help="Path to model config folder")
+    parser.add_argument("--pretrained_tss_model", required=True, help="Path to pretrained TSS model")
+    parser.add_argument("--pretrained_tes_model", required=True, help="Path to pretrained TES model")
+    parser.add_argument("--pretrained_stage2_model", required=True, help="Path to pretrained stage 2 model")
+    parser.add_argument("--model_type", required=True, help="Model type to use for Stage 1")
     args = parser.parse_args()
 
     project_config = load_config(args.project_config)
     project_config.validation_chromosomes_file = os.path.join(project_config.data_output_dir, "validation_chromosomes.txt")
 
-    for model_type in ["xgboost", "randomforest"]:
-        df_tss = pd.read_csv(project_config.tss_labeled_file)
-        with open(os.path.join(args.model_config_folder, f"tss_{model_type}_config.yaml")) as f:
-            model_config = yaml.safe_load(f)
+    df_tss = pd.read_csv(project_config.tss_labeled_file)
+    with open(os.path.join(args.model_config_folder, f"tss_{args.model_type}_config.yaml")) as f:
+        model_config = yaml.safe_load(f)
 
-        metrics, model, df_tss_pred = train_and_evaluate_stage1(df_tss, model_type, model_config, project_config, "tss")
+    metrics, model, df_tss_pred = validate_stage1(df_tss, args.model_type, model_config, project_config, args.pretrained_tss_model, "tss")
 
-        df_tes = pd.read_csv(project_config.tes_labeled_file)
-        with open(os.path.join(args.model_config_folder, f"tes_{model_type}_config.yaml")) as f:
-            model_config = yaml.safe_load(f)
+    df_tes = pd.read_csv(project_config.tes_labeled_file)
+    with open(os.path.join(args.model_config_folder, f"tes_{args.model_type}_config.yaml")) as f:
+        model_config = yaml.safe_load(f)
 
-        metrics, model, df_tes_pred = train_and_evaluate_stage1(df_tes, model_type, model_config, project_config, "tes")
+    metrics, model, df_tes_pred = validate_stage1(df_tes, args.model_type, model_config, project_config, args.pretrained_tes_model, "tes")
 
-        train_and_evaluate_stage2(df_tss_pred, df_tes_pred, project_config, model_type)
-    
+    validate_stage2(df_tss_pred, df_tes_pred, project_config, args.model_type, args.pretrained_stage2_model)
+
     project_config.save_to_file(args.project_config)
 
 

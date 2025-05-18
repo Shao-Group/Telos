@@ -1,80 +1,110 @@
 # Telos
 
-This project identifies **Transcript Start Sites (TSS)** and **Transcript End Sites (TES)** from Oxford Nanopore long-read RNA sequencing data, using features extracted from BAM alignments. It is **annotation-agnostic** for training and supports multiple tools and models for benchmarking.
+Telos is an **annotation-agnostic** tool that improves transcript assembly accuracy by delineating **Transcript Start Sites (TSS)** and **Transcript End Sites (TES)** from RNA sequencing data, using features extracted from BAM alignments. It can be used with any assembler as long as it produces a gtf file annotated with coverage information 
 
 ## 🔍 Overview
 
-* Input: BAM files aligned with Minimap2 + candidate sites from StringTie or IsoQuant
-* Output: Trained classifiers for TSS and TES, with evaluation metrics and feature importance
-* Features extracted: coverage shifts, soft-clipping, entropy, splice junction distance, etc.
-* Models supported: XGBoost, LightGBM, RandomForest
+* Input: BAM files aligned with Minimap2 + assembled transcripts (gtf file) + reference annotation + gffcompare tmap on baseline gtf file.
+* Output: Trained classifiers for TSS and TES, and **Transcript Scoring** with evaluation metrics and feature importance
+* Features extracted: read density, coverage shifts, soft-clipping, entropy, splice junction distance, etc.
+* Models supported: XGBoost, RandomForest
 * Evaluation: Precision/Recall, F1, AUPR, Accuracy, Confusion Matrix
 
 ## 📂 Directory Structure
 
 ```
-├── features/               # Raw feature CSVs per tool and site type
-├── data_train/       # Same features but labeled using RefSeq
-├── reports/                # Model evaluation metrics and plots
-├── models/                 # Trained model artifacts
-├── configs/                # YAML config files for TSS/TES models
-├── logs/                   # CLI logs and benchmark summaries
+├── project_config/         # YAML and pkl config files for TSS/TES models and project configurations
 ├── src/                    # All scripts and utilities
-├── out/                    # All output files 
+```
+Output directory structure:
+
+```
+├── data                 # Contains candidate sites, coverage file, and validation baseline
+├── features             # Extracted features from the candidate sites
+├── models               # Saved models after training
+├── predictions          # Stage 1 and 2 prediction on the validation dataset
+├── updated_cov          # GTF files after updating the coverage based on predictions
+├── reports
+  ├── feature_importance # Feature importance from TSS/TES randomforest model
+  ├── gffcompare         # GFFCompare results folder
+  ├── pr_data            # Precision Recall curve data for stage 1 models
+  ├── transcript_pr_data # Transcript level precision recall data
+  
 ```
 
 ## ⚙️ Scripts & How to Run
+All scripts are run from the **root** folder of the project.
 
-### 1. Extract Features from BAM
+### Step 0: Prerequisites
+Install python required packages, RNASeqtools. Also, install GFFCompare using conda. Now, you need the following input files:
+  - BAM File: an aligned BAM file of RNA-seq data
+  - GTF FILE: Assembled transcripts in a gtf file
+  - Reference annotation gtf
 
-Extract features for candidate sites from a BAM file.
+
+### 1. Project setup
+Run GFFCompare on the baseline assembled gtf file. You will need to pass the `.tmap` file as input to `install.py`.
+
+Setup the project for analysis.
+  - --dir-rnaseq : RNASeq-Tools home directory
+  - --prefix: a prefix that will be concatenated to some output files
+  - --dir-output: Output directory (should be empty)
 
 ```bash
-python src/extract_features.py --method stringtie (or isoquant) 
+python src/install.py --dir-rnaseq DIR_RNASEQ --dir-output DIR_OUTPUT --file-bam FILE_BAM --file-gtf FILE_GTF --prefix PREFIX --ref-anno-gtf REF_ANNO_GTF --tmap-file TMAP_FILE
 ```
 
-### 2. Label Features using Reference Annotation
+The `config.pkl` will be inside `project_config/` directory. You need to pass this filepath in later stages of the analysis. 
+
+### 2. Extract Features
+
+Now, extract features using the bam file. 
+
+```bash
+python src/extract_features.py --config CONFIG_PATH
+```
+
+### 3. Label Features using Reference Annotation
 
 Assign labels (1 = true site, 0 = false) using a distance threshold to reference TSS/TES.
 
-For batch labeling, 
+For labeling candidate boundaries, 
 ```bash
 python src/label_candidates.py \
-  --reference data/refSeq.tsstes \
-  --distance 50 \
-  --mapping data/GRCh38_RefSeq2UCSC.txt \
-  --batch 
+  -- config CONFIG_PATH
+  --distance 50 
 ```
 
-### 3. Train Models for a Given Tool
+### 4. Train Models 
 
-Trains models for both TSS and TES using a specific tool's candidates.
+Trains models for both Stage 1 and 2 using a candidate features.
 
 ```bash
-python src/train_all.py 
+python src/train_all.py --project-config CONFIG_PATH --model-config-folder project_config 
+```
+Model config folder should contain configuration for the stage 1 models. Example can be found in `project_config` folder.
+
+### 5. Validate only using pretrained model
+
+```bash
+python src/validate_with_pretrained.py --project-config PROJECT_CONFIG --model-config-folder MODEL_CONFIG_FOLDER \
+                                   --pretrained_tss_model PRETRAINED_TSS_MODEL --pretrained_tes_model PRETRAINED_TES_MODEL \ --pretrained_stage2_model PRETRAINED_STAGE2_MODEL \ 
+                                   --model_type MODEL_TYPE
+```
+
+### 5. Generate comparison data with GTFCuff
+
+To generate results for comparison, run:
+
+```bash
+python src/generate_roc_data.py --project-config PROJECT_CONFIG --gffcompare-env GFFCOMPARE_ENV
 ```
 
 
-### 4. Summarize Metrics
-
-All the stats, summarization and plot generation available at src/data-analysis.ipynb
-
-
-
-### Data Names
-
-  - nanopore_cDNA_NA12878  
-  - pacbio_ENCFF450VAU  
-  - nanopore_dRNA_NA12878   
-  - pacbio_ENCFF694DIE  
-  - SRR307903_hisat
-  
 ---
-<!-- 
 ## ✍️ Author
 
-Developed by [irtesampsu](https://github.com/irtesampsu) as part of course project for CSE 566 at Penn State.
-
+Developed by [Shao Lab](https://github.com/Shao-Group).
 ---
 
-For help or issues, open an issue on GitHub or contact the author. -->
+For help or issues, open an issue on GitHub or contact the author. 

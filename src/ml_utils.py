@@ -43,7 +43,7 @@ def load_tmap_labels(tmap_path):
     return df[['transcript_id', 'label']]
 
 
-def stratified_split(df, label_col='label'):
+def stratified_split(df, validation_chrom_file, label_col='label', ):
     # X_train, X_val, y_train, y_val =  train_test_split(df, df[label_col], test_size=test_size, stratify=df[label_col], random_state=seed)
     # split based on chromosome 
     df['chrom_number'] = df['chrom'].apply(chrom_to_int)
@@ -57,6 +57,10 @@ def stratified_split(df, label_col='label'):
     X_val = df[val_mask].drop(columns=[label_col])
     y_train = df[train_mask][label_col]
     y_val = df[val_mask][label_col]
+
+    with open(validation_chrom_file, 'w') as f:
+        for chrom in X_val['chrom'].unique():
+            f.write(f"{chrom}\n")
 
     print(f"Train size: {X_train.shape}, Validation size: {X_val.shape}")
     print(f"Train label distribution: {y_train.value_counts(normalize=True)}")

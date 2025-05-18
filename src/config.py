@@ -39,14 +39,18 @@ class Config:
         self.reports_output_dir     = os.path.join(base, "reports")
         self.predictions_output_dir = os.path.join(base, "predictions")
         self.models_output_dir      = os.path.join(base, "models")
+        self.updated_cov_dir        = os.path.join(base, "updated_cov")
+
+        self.transcript_pr_data     = os.path.join(self.reports_output_dir, "transcript_pr_data")
         self.pr_data_dir            = os.path.join(self.reports_output_dir, "pr_data")
         self.feature_importance_dir = os.path.join(self.reports_output_dir, "feature_importance")
-        
+        self.gffcompare_dir        = os.path.join(self.reports_output_dir, "gffcompare")
 
         for d in (self.data_output_dir, self.features_output_dir,
                   self.reports_output_dir, self.predictions_output_dir,
                   self.models_output_dir, self.pr_data_dir,
-                  self.feature_importance_dir):
+                  self.feature_importance_dir, self.gffcompare_dir, 
+                  self.transcript_pr_data, self.updated_cov_dir):
             os.makedirs(d, exist_ok=True)
 
 
@@ -56,8 +60,7 @@ class Config:
         self.tes_feature_file   = os.path.join(self.features_output_dir, f"{p}_tes_features.tsv")
         self.tss_labeled_file   = os.path.join(self.features_output_dir, f"{p}_tss_labeled.tsv")
         self.tes_labeled_file   = os.path.join(self.features_output_dir, f"{p}_tes_labeled.tsv")
-
-        
+        self.auc_file           = os.path.join(self.transcript_pr_data, f"{p}_auc.csv")
 
     @classmethod
     def create(cls, bam_file, gtf_file, prefix, output_dir, rnaseqtools_dir, ref_anno_gtf, tmap_file):
