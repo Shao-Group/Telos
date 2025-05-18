@@ -36,7 +36,14 @@ def chrom_to_int(c):
     return None
 
 
-def stratified_split(df, label_col='label', validation_chrom_file='data_train/validation_chromosomes.txt'):
+def load_tmap_labels(tmap_path):
+    df = pd.read_csv(tmap_path, sep='\t', comment='#', header=0)
+    df = df[['qry_id', 'class_code']].rename(columns={'qry_id': 'transcript_id'})
+    df['label'] = (df['class_code'] == '=').astype(int)
+    return df[['transcript_id', 'label']]
+
+
+def stratified_split(df, label_col='label'):
     # X_train, X_val, y_train, y_val =  train_test_split(df, df[label_col], test_size=test_size, stratify=df[label_col], random_state=seed)
     # split based on chromosome 
     df['chrom_number'] = df['chrom'].apply(chrom_to_int)
@@ -51,19 +58,13 @@ def stratified_split(df, label_col='label', validation_chrom_file='data_train/va
     y_train = df[train_mask][label_col]
     y_val = df[val_mask][label_col]
 
-    validation_chromosomes = X_val['chrom'].unique().tolist()
-    with open (validation_chrom_file, 'w') as f:
-        f.write('\n'.join(validation_chromosomes))
-
-    print(f"Validation chromosomes saved to {validation_chromosomes} : {validation_chrom_file}")
-    print(f"Training chromosomes: {X_train['chrom'].unique()}")
     print(f"Train size: {X_train.shape}, Validation size: {X_val.shape}")
     print(f"Train label distribution: {y_train.value_counts(normalize=True)}")
     print(f"Validation label distribution: {y_val.value_counts(normalize=True)}")
     return X_train, X_val, y_train, y_val
     
 
-def evaluate_model(y_true, y_pred, y_prob, plot_path=None):
+def evaluate_model(y_true, y_pred, y_prob, prdata_path, plot_path=None):
     precision, recall, _ = precision_recall_curve(y_true, y_prob)
     f1 = f1_score(y_true, y_pred)
     aupr = average_precision_score(y_true, y_prob)
@@ -75,9 +76,8 @@ def evaluate_model(y_true, y_pred, y_prob, plot_path=None):
 
     # PR curve dataframe
     pr_data = pd.DataFrame({"precision": precision, "recall": recall})
-    prefix = os.path.splitext(plot_path)[0]
 
-    pr_data.to_csv(f"{prefix}_pr_data.csv", index=False)
+    pr_data.to_csv(prdata_path, index=False)
     if plot_path:
         plt.figure()
         plt.plot(recall, precision, label=f"PR AUC={aupr:.3f}")
@@ -109,18 +109,9 @@ def load_model(model_type, config):
             colsample_bytree=config["colsample_bytree"],
             # use_label_encoder=False,
             objective="binary:logistic",
-            eval_metric="auprc"
+            eval_metric="aucpr"
         )
-    elif model_type == "lightgbm":
-        import lightgbm as lgb
-        return lgb.LGBMClassifier(
-            n_estimators=config["n_estimators"],
-            max_depth=config["max_depth"],
-            learning_rate=config["learning_rate"],
-            subsample=config["subsample"],
-            colsample_bytree=config["colsample_bytree"]
-        )
-    
+
     elif model_type == "randomforest":
         return RandomForestClassifier(
             n_estimators=config["n_estimators"],
@@ -132,14 +123,10 @@ def load_model(model_type, config):
         raise ValueError(f"Unsupported model type: {model_type}")
 
 
-def load_saved_model(model_type, model_dir):
+def load_saved_model(model_type, model_path):
     if model_type == "xgboost":
-        # import xgboost as xgb
-        return json.load(open(f"{model_dir}/xgb_model.json"))
-    # elif model_type == "lightgbm":
-    #     import lightgbm as lgb
-    #     return lgb.LGBMClassifier()
+        return json.load(open(model_path))  
     elif model_type == "randomforest":
-        return joblib.load(f"{model_dir}/randomforest_model.joblib")
+        return joblib.load(model_path)
     else:
         raise ValueError(f"Unsupported model type: {model_type}")

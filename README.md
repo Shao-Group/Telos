@@ -1,4 +1,4 @@
-# Find-TSS-TES
+# Telos
 
 This project identifies **Transcript Start Sites (TSS)** and **Transcript End Sites (TES)** from Oxford Nanopore long-read RNA sequencing data, using features extracted from BAM alignments. It is **annotation-agnostic** for training and supports multiple tools and models for benchmarking.
 
@@ -68,12 +68,13 @@ All the stats, summarization and plot generation available at src/data-analysis.
   - nanopore_dRNA_NA12878   
   - pacbio_ENCFF694DIE  
   - SRR307903_hisat
+  
 ---
-
+<!-- 
 ## ✍️ Author
 
 Developed by [irtesampsu](https://github.com/irtesampsu) as part of course project for CSE 566 at Penn State.
 
 ---
 
-For help or issues, open an issue on GitHub or contact the author.
+For help or issues, open an issue on GitHub or contact the author. -->

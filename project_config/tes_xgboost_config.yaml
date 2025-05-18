@@ -1,0 +1,6 @@
+n_estimators: 250
+max_depth: 6
+learning_rate: 0.05
+subsample: 0.9
+colsample_bytree: 0.9
+early_stopping_rounds: 20

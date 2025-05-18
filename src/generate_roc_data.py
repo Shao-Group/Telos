@@ -8,60 +8,26 @@ from typing import List
 import re
 from collections import defaultdict
 import logging
+from config import Config
 
-@dataclass
-class PipelineConfig:
-    data_name: str
-    ref_anno: Path
-    val_chrom: Path
-    anno_name: str 
-    pred_dir: Path = field(init = False) 
-    auc_file: Path = field(init = False)
-    # Repositories / tools
-    home: Path = Path("/datadisk1/ixk5174/tools/rnaseqtools/gtfformat")
-    home_cuff: Path = Path("/datadisk1/ixk5174/tools/rnaseqtools/gtfcuff")
-    gffcompare_env: str = "gffcompare"
 
-    # Data directories
-    data_home: Path = Path("/datadisk1/ixk5174/long_reads_compare/out/gffcomp-results/")
-    data_dir: Path = field(init=False)
-    project_out_dir: Path = Path("/datadisk1/ixk5174/tools/tss-tes-project/out/")
-    project_data_dir: Path = Path("/datadisk1/ixk5174/tools/tss-tes-project/data/")
-    out_dir: Path = field(init=False)
-    roc_out_dir: Path = field(init=False)
-    # ref_anno: Path = Path("/datadisk1/ixk5174/long_reads_compare/anno/refSeq_anno.gtf")
-    # val_chrom: Path = Path(f"/datadisk1/ixk5174/tools/tss-tes-project/data_train/")
-    # Parameters
-    tools: List[str]  = field(default_factory=lambda: ["stringtie", "isoquant"])
-    models: List[str] = field(default_factory=lambda: ["xgboost", "randomforest"])
-
-    def __post_init__(self):
-        self.data_home = self.data_home / self.data_name
-        self.data_dir    = self.data_home / "val-baseline"
-        self.out_dir     = self.data_home / "updated-cov"
-        self.roc_out_dir = self.out_dir  / "roc"
-        self.pred_dir = self.project_out_dir / self.data_name / self.anno_name / "predictions/transcripts"
-        self.project_data_dir = self.project_data_dir / self.data_name
-        self.ref_anno = self.ref_anno.absolute()
-        self.val_chrom = self.val_chrom.absolute()
-        self.auc_file = self.pred_dir / f"auc.csv"
-
-class TSSPipeline:
-    def __init__(self, cfg: PipelineConfig):
+class ROCPipeline:
+    def __init__(self, cfg: Config, gffcompare_env: str):
         self.cfg = cfg
+        self.gffcompare_env = gffcompare_env
         # ensure output dirs exist
-        self.cfg.out_dir.mkdir(parents=True, exist_ok=True)
-        self.cfg.roc_out_dir.mkdir(parents=True, exist_ok=True)
         self.multi_exon_count = self._count_multi_exon_transcripts()
+
+        self.gtfformat_home = Path(self.cfg.rnaseqtools_dir) / "gtfformat"
+        self.gtfcuff_home   = Path(self.cfg.rnaseqtools_dir) / "gtfcuff"
+        
 
 
     def _run(self, cmd: List[str], cwd: Path = None, **kwargs):
         """Run a subprocess with logging and error checking."""
         logging.info(f"→ {' '.join(cmd)}  (cwd={cwd})")
-        proc = subprocess.run(cmd, cwd=cwd, check=True, **kwargs)
-        # print(proc.stdout)
-        # print(proc.stderr)
-
+        subprocess.run(cmd, cwd=cwd, check=True, **kwargs)
+ 
     def _gffcompare_cmd(self, *args) -> List[str]:
         """Wrap gffcompare in a conda-run command."""
         return ["conda", "run", "-n", self.cfg.gffcompare_env, "gffcompare", *args]
@@ -201,14 +167,13 @@ class TSSPipeline:
     def generate_baseline(self):
         """Filter the baseline GTFs with validation chromosomes."""
         logging.info("[baseline] filtering original GTFs")
-        self.cfg.data_dir.mkdir(parents=True, exist_ok=True)
-        for tool in self.cfg.tools:
-            gtf = self.cfg.project_data_dir / f"{tool}.gtf"
-            out_gtf = self.cfg.data_dir / f"{tool}-chrom-filtered.gtf"
-            self._run(
-                ["./gtfformat", "filter-chrom", str(gtf), str(self.cfg.val_chrom), str(out_gtf)],
-                cwd=self.cfg.home
-            )
+        
+        input_gtf = self.cfg.gtf_file
+        out_gtf = self.cfg.data_output_dir / f"baseline-chrom-filtered.gtf"
+        self._run(
+            ["./gtfformat", "filter-chrom", str(input_gtf), str(self.cfg.validation_chromosomes_file), str(out_gtf)],
+            cwd=self.gtfformat_home
+        )
     
     def _count_multi_exon_transcripts(self) -> int:
         """

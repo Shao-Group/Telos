@@ -8,3 +8,6 @@ configs/
 logs/
 models/
 reports/
+sample_data/
+old_src/
+project_config/config.pkl

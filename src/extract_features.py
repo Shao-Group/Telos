@@ -3,18 +3,12 @@ import pysam
 import pandas as pd
 import numpy as np
 from collections import Counter
-from config import config
+from config import load_config, save_config
 import math
 import os
 from tqdm import tqdm
 from scipy.stats import entropy
-
-# Example candidate sites text
-# TSS GL000194.1 115066 0 1
-# TSS GL000195.1 86726 0 2
-# TSS GL000195.1 137958 4 0
-# TSS GL000195.1 142050 1 0
-
+import gen_baseline_labels as gen_baseline_labels
 
 
 def load_candidate_sites(file_path):
@@ -191,30 +185,50 @@ def read_start_end_entropy(start_positions, end_positions, pos, cfg):
     return start_entropy, end_entropy
 
 
-def main(cfg):
+def main(cfg, config_path):
     if cfg == None:
+        raise ValueError("Configuration has not been created. Please call create_config() first.")
         return
-    
+
+    cov_file, candidate_file, ref_candidate_file = gen_baseline_labels.main(cfg)
+    cfg.set_cov_file(cov_file)
+    cfg.set_candidate_file(candidate_file)
+    cfg.set_ref_candidate_file(ref_candidate_file)
+
     bam = pysam.AlignmentFile(cfg.bam_file, "rb")  # <-- adjust path if needed
-    tss_candidate_sites, tes_candidate_sites = load_candidate_sites(cfg.candidate_sites_file)
+    tss_candidate_sites, tes_candidate_sites = load_candidate_sites(cfg.candidate_file)
     
     # Collect features
+    if os.path.exists(cfg.tss_feature_file) and os.path.exists(cfg.tes_feature_file):
+        print(f"Feature files already exist: {cfg.tss_feature_file}, {cfg.tes_feature_file}")
+        # Close the BAM file
+        bam.close()
+        save_config(config_path)
+
+        return
+
     print("Extracting TSS candidate features...")
     tss_feature_list = [extract_features(bam, *site, cfg) for site in tqdm(tss_candidate_sites, desc="TSS Feature Extraction")]
     features_df = pd.DataFrame(tss_feature_list)
-    features_df.to_csv(cfg.tss_output_file, index=False)
-    
+    features_df.to_csv(cfg.tss_feature_file, index=False)
+
     print("Extracting TES candidate features...")
     tes_feature_list = [extract_features(bam, *site, cfg) for site in tqdm(tes_candidate_sites, desc="TES Feature Extraction")]
-    
     features_df = pd.DataFrame(tes_feature_list)
-    features_df.to_csv(cfg.tes_output_file, index=False)
-    
-    # Close the BAM file
-    bam.close()
+    features_df.to_csv(cfg.tes_feature_file, index=False)
 
+    
     print("Feature extraction complete! Output saved as 'candidate_site_features.csv'.")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Extract features from BAM file.")
+    parser.add_argument(
+        "--config",
+        type=str,
+        required=True,
+        help="Path to the configuration file."
+    )
+    args = parser.parse_args()
+    cfg = load_config(args.config)
+    main(cfg, args.config)
