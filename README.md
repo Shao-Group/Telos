@@ -115,3 +115,25 @@ Developed by [Shao Group](https://github.com/Shao-Group).
 ---
 
 For help or issues, open an issue on GitHub or contact the author. 
+
+
+---
+# License & Citation
+
+Telos is freely available under BSD 3-Clause License. 
+
+Copyright (c) 2024, Irtesam Mahmud Khan, Xiaofei Carl Zang, Ange Teng, Tasfia Zahin, Mingfu Shao, and The Pennsylvania State University.
+
+The preprint of Telos is available on bioRxiv [here](https://doi.org/10.1101/2025.10.13.682211).
+
+```
+@article{Telos,
+  title = {Boosting Transcript Assembly via Delineating Transcript Start and End Sites},
+  url = {http://dx.doi.org/10.1101/2025.10.13.682211},
+  DOI = {10.1101/2025.10.13.682211},
+  publisher = {Cold Spring Harbor Laboratory},
+  author = {Khan,  Irtesam Mahmud and Zang,  Xiaofei Carl and Teng,  Ange and Zahin,  Tasfia and Shao,  Mingfu},
+  year = {2025},
+  month = oct 
+}
+```
