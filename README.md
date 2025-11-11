@@ -33,10 +33,15 @@ Output directory structure:
 ```
 
 ## ⚙️ Scripts & How to Run
-All scripts are run from the **root** folder of the project.
+All scripts are run from the **root** folder of the project where this `README.md` is located.
 
 ### Step 0: Prerequisites
-Install python required packages, RNASeqtools. Also, install GFFCompare using conda. Now, you need the following input files:
+All the required packages are available at `environment.yml` file. We recommend using anaconda creating a virtual environment using anaconda from the yml file. This can be done using the following command:
+```
+conda env create -f environment.yml
+```
+After installing required python packages, [RNASeqtools](https://github.com/Shao-Group/rnaseqtools) needs to be installed following the directive in the source repository. Next, install GFFCompare using bioconda in a separate conda environment in order to run `gffcompare` easily. This is required for generating results comparing Telos with the baseline. You are now ready to run Telos. 
+Now, you need the following input files:
   - BAM File: an aligned BAM file of RNA-seq data
   - GTF FILE: Assembled transcripts in a gtf file
   - Reference annotation gtf
@@ -49,6 +54,10 @@ Setup the project for analysis.
   - --dir-rnaseq : RNASeq-Tools home directory
   - --prefix: a prefix that will be concatenated to some output files
   - --dir-output: Output directory (should be empty)
+  - --file-bam: Path to the BAM file containing aligned reads
+  - --file-gtf: Path to the GTF file of assembled transcripts
+  - --ref-anno-gtf: Path to the Reference annotation GTF file
+  - --tmap-file: *.tmap* file obtained after running GFFCompare on the baseline GTF and reference annotation.
 
 ```bash
 python src/install.py --dir-rnaseq DIR_RNASEQ --dir-output DIR_OUTPUT --file-bam FILE_BAM --file-gtf FILE_GTF --prefix PREFIX --ref-anno-gtf REF_ANNO_GTF --tmap-file TMAP_FILE
@@ -58,7 +67,7 @@ The `config.pkl` will be inside `project_config/` directory. You need to pass th
 
 ### 2. Extract Features
 
-Now, extract features using the bam file. 
+Now, extract features using the bam file. By default, the script does parallel processing with number of parallel processes is set to number of available cpu cores (maximum 8). You can set the number of processes manually by passing the argument `--n-processes=$INTEGER` or you can turn off parallel processing completely by passing `--no-parallel`.
 
 ```bash
 python src/extract_features.py --config CONFIG_PATH
@@ -80,16 +89,14 @@ python src/label_candidates.py \
 Trains models for both Stage 1 and 2 using a candidate features.
 
 ```bash
-python src/train_all.py --project-config CONFIG_PATH --model-config-folder project_config 
+python src/train_all.py --project-config CONFIG_PATH --model-config-folder project_config
 ```
 Model config folder should contain configuration for the stage 1 models. Example can be found in `project_config` folder.
 
 ### 5. Validate only using pretrained model
 
 ```bash
-python src/validate_with_pretrained.py --project-config PROJECT_CONFIG --model-config-folder MODEL_CONFIG_FOLDER \
-                                   --pretrained_tss_model PRETRAINED_TSS_MODEL --pretrained_tes_model PRETRAINED_TES_MODEL \ --pretrained_stage2_model PRETRAINED_STAGE2_MODEL \ 
-                                   --model_type MODEL_TYPE
+python src/validate_with_pretrained.py --project-config PROJECT_CONFIG --model-config-folder MODEL_CONFIG_FOLDER  --pretrained_tss_model PRETRAINED_TSS_MODEL_PATH --pretrained_tes_model PRETRAINED_TES_MODEL_PATH --pretrained_stage2_model PRETRAINED_STAGE2_MODEL_PATH --model_type MODEL_TYPE
 ```
 
 ### 5. Generate comparison data with GTFCuff
@@ -104,7 +111,7 @@ python src/generate_roc_data.py --project-config PROJECT_CONFIG --gffcompare-env
 ---
 ## ✍️ Author
 
-Developed by [Shao Lab](https://github.com/Shao-Group).
+Developed by [Shao Group](https://github.com/Shao-Group).
 ---
 
 For help or issues, open an issue on GitHub or contact the author. 
