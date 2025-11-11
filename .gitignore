@@ -1,5 +1,6 @@
 src/__pycache__/
 src/utils/__pycache__/
+src/plotters/__pycache__/
 data/
 out/
 features/
@@ -10,4 +11,4 @@ models/
 reports/
 sample_data/
 old_src/
-project_config/config.pkl
+project_config/*config.pkl
