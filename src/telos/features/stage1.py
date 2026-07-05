@@ -314,7 +314,7 @@ def extract_stage1_stat_features(
         features["read_start_clustering"] = close_reads / max(len(read_starts), 1)
         upstream_starts = int(np.sum(read_starts < pos))
         downstream_starts = int(np.sum(read_starts > pos))
-        features["up_down_stream_ratio"] = upstream_starts / max(downstream_starts, 1)
+        features["upstream_downstream_ratio"] = upstream_starts / max(downstream_starts, 1)
         features["five_prime_degradation_score"] = calculate_degradation_score(read_starts, pos)
     else:
         features["read_start_variance"] = 0.0
@@ -563,7 +563,7 @@ def compute_stage1_features_for_site(
     read_end_density = int(np.sum(np.abs(read_ends - pos) <= cfg.density_window)) if len(read_ends) > 0 else 0
 
     nearest_splice, softclip_bias = nearest_splice_and_softclip_bias(narrow_reads, pos, cfg, strand)
-    start_entropy, end_entropy = read_start_end_entropy(read_starts, read_ends, pos, cfg)
+    start_entropy, end_entropy = read_start_end_entropy(read_starts, read_ends)
     gradient_sharpness, max_gradient, local_cov = calculate_coverage_gradient_sharpness(
         narrow_reads, pos, cfg, strand
     )
