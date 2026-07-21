@@ -1,8 +1,8 @@
 """
 Canonical loaders bridging GTF inputs to Stage I/II data structures.
 
-Delegates candidate extraction to :mod:`telos_v2.candidates.extract` and transcript tables to
-:mod:`telos_v2.backends.gtfformat`.
+Delegates candidate extraction to :mod:`telos.candidates.extract` and transcript tables to
+:mod:`telos.backends.gtfformat`.
 """
 
 from __future__ import annotations
