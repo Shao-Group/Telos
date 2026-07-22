@@ -73,6 +73,26 @@ def novel_reference_sites_from_gtf(ref_gtf: Path, *, novel_prefix: str = "NOVEL_
     return pd.DataFrame(out)
 
 
+def _proximity_hits(positions: np.ndarray, ref_sorted: np.ndarray, tolerance_bp: int) -> np.ndarray:
+    """
+    Return 0/1 hits: each query position is 1 iff some ref lies within ``tolerance_bp``.
+
+    ``ref_sorted`` must be ascending (built with ``np.unique`` in :func:`label_sites_by_proximity`).
+    Binary-searches each query and checks only the clipped left/right neighbors.
+    """
+    if len(positions) == 0 or len(ref_sorted) == 0:
+        return np.zeros(len(positions), dtype=int)
+    tol = int(tolerance_bp)
+    n_ref = len(ref_sorted)
+    idx = np.searchsorted(ref_sorted, positions)
+    i_right = np.minimum(idx, n_ref - 1)
+    i_left = np.maximum(idx - 1, 0)
+    hit = (np.abs(ref_sorted[i_right] - positions) <= tol) | (
+        np.abs(ref_sorted[i_left] - positions) <= tol
+    )
+    return hit.astype(int)
+
+
 def label_sites_by_proximity(
     features_df: pd.DataFrame,
     ref_df: pd.DataFrame,
@@ -82,6 +102,9 @@ def label_sites_by_proximity(
     """
     Binary label per row: 1 if any reference site of the same site_type matches
     chrom (normalized), strand, and |Δpos| <= tolerance_bp.
+
+    Feature groups with no reference sites on the same chrom/strand stay labeled ``0``
+    (they are negatives, not errors).
     """
     st = site_type.upper()
     feat = features_df.copy()
@@ -93,18 +116,16 @@ def label_sites_by_proximity(
     if ref.empty:
         raise SiteLabelError("No reference sites found for site type: %s" % site_type)
 
+    # Per (chrom, strand): unique positions, already sorted ascending by np.unique.
     ref_grouped: dict[tuple[str, str], np.ndarray] = {}
     for (c, strand), g in ref.groupby(["_chrom_n", "strand"]):
-        ref_grouped[(c, strand)] = g["position"].astype(int).values
+        ref_grouped[(c, strand)] = np.unique(g["position"].astype(int).to_numpy())
 
     for (c, strand), g in feat.groupby(["_chrom_n", "strand"], sort=False):
         ref_pos = ref_grouped.get((c, strand))
         if ref_pos is None or len(ref_pos) == 0:
-            raise SiteLabelError("No reference sites found for site type: %s on chromosome: %s and strand: %s" % (site_type, c, strand))
-
-        pos = g["position"].astype(int).values
-        diff = np.abs(pos[:, None] - ref_pos[None, :])
-        hit = (diff <= int(tolerance_bp)).any(axis=1).astype(int)
-        labels.loc[g.index] = hit
+            continue
+        pos = g["position"].astype(int).to_numpy()
+        labels.loc[g.index] = _proximity_hits(pos, ref_pos, tolerance_bp)
 
     return labels
