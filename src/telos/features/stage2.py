@@ -52,7 +52,7 @@ def site_table_for_stage2_merge(
     Reduce Stage I rows for one ``site_type`` to **one row per genomic site** with a probability column.
 
     Left-joins feature rows ``df_all`` with scored probabilities from ``df_scored`` on
-    ``transcript_id, chrom, position, site_type``. Missing probs become ``0.5``.
+    ``transcript_id, chrom, position, site_type``. Raises if any probability is missing.
 
     For Stage II coordinate-based merging we must avoid transcript-id deduplication (a transcript_id can
     appear with ``strand="."`` expanded into both ``+`` and ``-`` conventions). Instead we dedupe by
@@ -72,9 +72,11 @@ def site_table_for_stage2_merge(
     ].copy()
     prob = prob.rename(columns={prob_col: "probability"})
     out = sub.merge(prob, on=["transcript_id", "chrom", "position", "site_type"], how="left")
-    if out["probability"].isna().any():
-        print(f"WARNING: {out['probability'].isna().sum()} rows have missing probability from stage 1 scoring")
-        out["probability"] = out["probability"].fillna(0.5)
+    n_missing = int(out["probability"].isna().sum())
+    if n_missing:
+        raise ValueError(
+            f"Stage II site merge ({st}, {prob_col}): {n_missing} row(s) missing Stage I probability."
+        )
     n_rows_before = int(len(out))
     n_unique_sites_before = int(
         out.drop_duplicates(["chrom", "position", "strand", "site_type"]).shape[0]
@@ -105,6 +107,9 @@ def merge_cov_tss_tes(
 
     All non-join site columns are suffixed ``_tss`` / ``_tes`` **before** merging so every Stage I
     feature from both ends is retained for training while cov (transcript-level) columns stay bare.
+
+    Sets ``chrom`` from ``tes_chrom`` for train/val splitting. Cross-chromosome TSS/TES pairs
+    (e.g. fusions) are kept; a warning is logged with the mismatch count.
     """
     tss = suffix_site_table_columns(
         df_tss.drop(columns=["transcript_id"], errors="ignore").copy(),
@@ -127,7 +132,17 @@ def merge_cov_tss_tes(
         right_on=list(STAGE2_SITE_JOIN_KEYS),
         how="inner",
     )
-    return df.drop(columns=["chrom", "position"], errors="ignore")
+    df = df.drop(columns=["chrom", "position"], errors="ignore")
+
+    mismatch = df["tss_chrom"].astype(str) != df["tes_chrom"].astype(str)
+    n_mismatch = int(mismatch.sum())
+    if n_mismatch:
+        print(
+            f"[telos] Stage II merge: {n_mismatch} transcript(s) have tss_chrom != tes_chrom "
+            "(kept; chrom set from tes_chrom)."
+        )
+    df["chrom"] = df["tes_chrom"].astype(str)
+    return df
 
 
 def add_stage2_derived_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -138,10 +153,14 @@ def add_stage2_derived_features(df: pd.DataFrame) -> pd.DataFrame:
     Uses :func:`numpy.log1p` for skew transforms. Returns a **copy**; does not mutate input.
     """
     df = df.copy()
+    for col in ("probability_tss", "probability_tes"):
+        if col not in df.columns:
+            raise KeyError(f"Stage II derived features require column {col!r}")
+
     df["transcript_length"] = np.abs(df["tes_pos"] - df["tss_pos"])
     df["log_transcript_length"] = np.log1p(df["transcript_length"])
-    df["tss_confidence"] = df.get("probability_tss", 0.5)
-    df["tes_confidence"] = df.get("probability_tes", 0.5)
+    df["tss_confidence"] = df["probability_tss"]
+    df["tes_confidence"] = df["probability_tes"]
     df["min_confidence"] = np.minimum(df["tss_confidence"], df["tes_confidence"])
     df["confidence_product"] = df["tss_confidence"] * df["tes_confidence"]
 
@@ -160,7 +179,7 @@ def add_stage2_derived_features(df: pd.DataFrame) -> pd.DataFrame:
     df["confidence_coverage_interaction"] = df["confidence_product"] * df["coverage"]
 
     df["confidence_sum"] = df["tss_confidence"] + df["tes_confidence"]
-    df["confidence_diff"] = abs(df["tss_confidence"] - df["tes_confidence"])
+    df["confidence_diff"] = np.abs(df["tss_confidence"] - df["tes_confidence"])
 
     if "first_exon_length" in df.columns and "last_exon_length" in df.columns:
         df["terminal_exon_ratio"] = df["first_exon_length"] / df["last_exon_length"].clip(lower=1)
@@ -181,7 +200,7 @@ def add_stage2_derived_features(df: pd.DataFrame) -> pd.DataFrame:
 
     if "exon_count" in df.columns and "total_exon_length" in df.columns:
         df["exon_length_std"] = (
-            np.sqrt(df["exon_length_variance"]) if "exon_length_variance" in df.columns else 0
+            np.sqrt(df["exon_length_variance"]) if "exon_length_variance" in df.columns else 0.0
         )
         df["exon_length_skewness"] = (df["max_exon_length"] - df["mean_exon_length"]) / df[
             "exon_length_std"
@@ -190,6 +209,19 @@ def add_stage2_derived_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# Transcript-level columns expected from cov / exon statistics (not Stage I site features).
+STAGE2_REQUIRED_EXON_COLS: tuple[str, ...] = (
+    "coverage",
+    "exon_count",
+    "first_exon_length",
+    "last_exon_length",
+    "max_exon_length",
+    "min_exon_length",
+    "mean_exon_length",
+    "total_exon_length",
+)
+
+# Dropped from the model matrix (ids, coords, labels). Stage I site features remain as ``*_tss`` / ``*_tes``.
 STAGE2_DROP_COLS = [
     "chrom",
     "position",
@@ -218,8 +250,29 @@ STAGE2_DROP_COLS = [
 
 def list_stage2_model_feature_names(df: pd.DataFrame) -> list[str]:
     """
-    All ``df`` columns suitable as model inputs: exclude ids, coordinates, strand, and label columns.
+    Numeric model inputs for Stage II: Stage I site features (``*_tss`` / ``*_tes``), cov/exon
+    statistics, and derived Stage II columns. Excludes ids, coordinates, strand, and labels.
 
-    Only drops entries from :data:`STAGE2_DROP_COLS` that actually exist, so optional columns do not break.
+    Raises if required exon stats or Stage I probability columns are missing, or if no Stage I
+    site feature columns (beyond probabilities) are present on either end.
     """
-    return [c for c in df.columns if c not in STAGE2_DROP_COLS]
+    missing = [c for c in STAGE2_REQUIRED_EXON_COLS if c not in df.columns]
+    for col in ("probability_tss", "probability_tes"):
+        if col not in df.columns:
+            missing.append(col)
+    if missing:
+        raise ValueError(f"Stage II frame missing required columns: {missing}")
+
+    features = [
+        c
+        for c in df.columns
+        if c not in STAGE2_DROP_COLS and pd.api.types.is_numeric_dtype(df[c])
+    ]
+    tss_feats = [c for c in features if c.endswith("_tss") and c != "probability_tss"]
+    tes_feats = [c for c in features if c.endswith("_tes") and c != "probability_tes"]
+    if not tss_feats or not tes_feats:
+        raise ValueError(
+            "Stage II frame must include Stage I site feature columns suffixed _tss and _tes "
+            f"(found n_tss={len(tss_feats)}, n_tes={len(tes_feats)})."
+        )
+    return features
