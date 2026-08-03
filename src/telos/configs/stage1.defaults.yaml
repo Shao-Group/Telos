@@ -1,0 +1,37 @@
+stage1:
+  training:
+    site_label_tolerance_bp: 50
+    split_policy: chr1-10
+    random_state: 42
+    random_forest:
+      n_estimators: 300
+      max_depth: null
+      max_features: sqrt
+      n_jobs: 20
+      class_weight: balanced_subsample
+    xgboost:
+      n_estimators: 300
+      max_depth: 6
+      learning_rate: 0.1
+      subsample: 0.8
+      colsample_bytree: 0.8
+      reg_lambda: 3
+      reg_alpha: 0.5
+      n_jobs: 20
+    lightgbm:
+      n_jobs: 20
+  feature_extraction:
+    window_size: 100
+    density_window: 100
+    coverage_window: 100
+    soft_clip_window: 10
+    min_mapq: 10
+    splice_site_window: 300
+    gradient_analysis_range: 100
+    extended_window: 1000
+    cache_dir: runs/telos_stage1_feature_cache
+    parallel: true
+    parallel_min_sites: 50
+    n_workers: null
+  features:
+    k_values: [3]
