@@ -8,7 +8,6 @@ site probabilities), writes ranked transcript TSVs for both.
 
 from __future__ import annotations
 
-from dataclasses import asdict
 import logging
 from pathlib import Path
 from typing import Any
@@ -42,7 +41,6 @@ from telos.pipeline_core import (
     build_stage1_inputs_multi_gtf,
     build_stage1_runtime_config,
 )
-from telos.reporting import write_run_manifest
 from telos.validation.preflight import (
     PreflightError,
     ensure_run_layout,
@@ -156,11 +154,7 @@ def run_train(cfg: TrainIO) -> int:
         logger.error("preflight failed: %s", exc)
         return 2
 
-    layout = ensure_run_layout(
-        cfg.outdir,
-        save_intermediates=cfg.save_intermediates,
-        create_aux_dirs=True,
-    )
+    layout = ensure_run_layout(cfg.outdir, create_aux_dirs=True)
     runtime_cfg = build_stage1_runtime_config(
         cfg_map,
         cli_no_parallel=cfg.stage1_no_parallel,
@@ -273,10 +267,8 @@ def run_train(cfg: TrainIO) -> int:
                 df_stage2,
                 layout.models_dir,
                 layout.predictions_dir,
-                layout.debug_dir if cfg.save_intermediates else None,
                 autosome_train_range=autosome_train_range,
                 stage1_backend_tag=backend,
-                save_intermediates=cfg.save_intermediates,
                 lgbm_n_jobs=lgbm_n_jobs,
             )
         except ImportError as exc:
@@ -288,29 +280,6 @@ def run_train(cfg: TrainIO) -> int:
 
     metrics_path = layout.reports_dir / "train_metrics.csv"
     _write_train_metrics(metrics_payload, metrics_path)
-
-    manifest_inputs = {
-        "bam": cfg.bam,
-        "gtf": cfg.gtf,
-        "ref_gtf": cfg.ref_gtf,
-    }
-    if cfg.tmap is not None:
-        manifest_inputs["tmap"] = cfg.tmap
-    if cfg.config_file is not None:
-        manifest_inputs["config"] = cfg.config_file
-    for index, path in enumerate(cfg.gtf_pool or (), start=1):
-        manifest_inputs[f"gtf_pool_{index}"] = path
-    for index, path in enumerate(cfg.tmap_pool or (), start=1):
-        manifest_inputs[f"tmap_pool_{index}"] = path
-    manifest_path = write_run_manifest(
-        layout.reports_dir / "run_manifest.json",
-        command="train",
-        args_dict=asdict(cfg),
-        inputs=manifest_inputs,
-        seed=seed,
-        split_policy=split_policy,
-        tolerance=tol,
-    )
 
     ranked_rf = layout.predictions_dir / transcripts_ranked_tsv_for_backend(STAGE1_BACKEND_RF)
     ranked_xgb = layout.predictions_dir / transcripts_ranked_tsv_for_backend(STAGE1_BACKEND_XGB)
@@ -335,7 +304,6 @@ def run_train(cfg: TrainIO) -> int:
         f"  transcripts_ranked_rf={ranked_rf}",
         f"  transcripts_ranked_xgb={ranked_xgb}",
         f"  train_metrics={metrics_path}",
-        f"  run_manifest={manifest_path}",
     ]
     print("\n".join(summary_lines))
     return 0

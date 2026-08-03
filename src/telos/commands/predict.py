@@ -6,14 +6,13 @@ Does not read ``tmap``; Stage II uses only coverage and site probabilities from 
 
 from __future__ import annotations
 
-from dataclasses import asdict
 import logging
 from pathlib import Path
 
 from pandas.errors import MergeError
 
 from telos.backends.gtfformat import GtfformatError, run_update_transcript_cov
-from telos.config_loader import get_nested, load_mapping_config
+from telos.config_loader import load_mapping_config
 from telos.config_validation import validate_stage_config
 from telos.config_models import PredictIO
 from telos.models import (
@@ -31,7 +30,6 @@ from telos.models.stage2_predict import run_stage2_predict
 from telos.models.stage2_train import build_stage2_inference_frame
 from telos.pipeline_core import build_stage1_inputs, build_stage1_runtime_config
 from telos.postprocess.filter_gtf import filter_gtf_by_transcript_scores
-from telos.reporting import write_run_manifest, write_run_summary
 from telos.validation.preflight import (
     PreflightError,
     ensure_run_layout,
@@ -65,11 +63,7 @@ def run_predict(cfg: PredictIO) -> int:
         logger.error("preflight failed: %s", exc)
         return 2
 
-    layout = ensure_run_layout(
-        cfg.outdir,
-        save_intermediates=cfg.save_intermediates,
-        create_aux_dirs=True,
-    )
+    layout = ensure_run_layout(cfg.outdir, create_aux_dirs=True)
     runtime_cfg = build_stage1_runtime_config(
         cfg_map,
         cli_no_parallel=cfg.stage1_no_parallel,
@@ -185,6 +179,9 @@ def run_predict(cfg: PredictIO) -> int:
             f"  summary={summary_path}",
         ]
     )
-    write_run_summary(summary_path, summary_lines)
+    summary_path.write_text(
+        "\n".join(summary_lines).rstrip() + "\n",
+        encoding="utf-8",
+    )
     print("\n".join(summary_lines))
     return 0

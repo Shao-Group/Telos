@@ -2,7 +2,7 @@
 Frozen dataclasses describing inputs for train, predict, and benchmark runs.
 
 These types are the boundary between :mod:`telos.cli` (argument parsing) and
-:mod:`telos.commands` / :mod:`telos.benchmark` (execution). All paths are
+:mod:`telos.commands` (execution). All paths are
 :class:`~pathlib.Path` instances; callers are responsible for resolving them if needed.
 """
 
@@ -20,7 +20,6 @@ class RunIO:
     gtf: Path
     outdir: Path
     config_file: Path | None = None
-    save_intermediates: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -59,7 +58,7 @@ class PredictIO(RunIO):
 @dataclass(frozen=True)
 class BenchmarkIO:
     """
-    Inputs for :func:`~telos.benchmark.orchestrator.run_benchmark`.
+    Inputs retained for the legacy benchmark redirect.
 
     ``config`` is the benchmark YAML/JSON path. ``outdir`` is the root for ``train/``, ``tests/``,
     and ``reports/`` unless overridden inside the benchmark file.

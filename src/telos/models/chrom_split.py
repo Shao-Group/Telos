@@ -143,29 +143,3 @@ def seqnames_on_validation_split_from_gtf(
         if n is None or not (lo <= n <= hi):
             val.append(seq)
     return sorted(val)
-
-
-def write_chrom_split_debug_lists(
-    df: pd.DataFrame,
-    train_mask: np.ndarray,
-    val_mask: np.ndarray,
-    reports_dir: Path,
-    *,
-    chrom_col: str = "chrom",
-) -> None:
-    """
-    Write ``validation_chromosomes.txt`` and ``train_chromosomes.txt`` under ``reports_dir``.
-
-    Intended for debugging splits when training saves intermediates.
-    """
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    tr = df.loc[train_mask]
-    va = df.loc[val_mask]
-    (reports_dir / "validation_chromosomes.txt").write_text(
-        "\n".join(str(x) for x in sorted(va[chrom_col].unique())) + "\n",
-        encoding="utf-8",
-    )
-    (reports_dir / "train_chromosomes.txt").write_text(
-        "\n".join(str(x) for x in sorted(tr[chrom_col].unique())) + "\n",
-        encoding="utf-8",
-    )

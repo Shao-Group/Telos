@@ -106,12 +106,6 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="Stage I feature pool size (default: config or min(CPU, 8)). Implies parallel when >1.",
     )
-    train.add_argument(
-        "--save-intermediates",
-        action="store_true",
-        help="Write optional Stage II diagnostics under <outdir>/debug/.",
-    )
-
     predict = sub.add_parser(
         "predict", parents=[common], help="Run inference with trained models"
     )
@@ -154,12 +148,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Also write a GTF containing transcripts at or above this score.",
     )
-    predict.add_argument(
-        "--save-intermediates",
-        action="store_true",
-        help="Create <outdir>/debug/ for optional diagnostics.",
-    )
-
     bench = sub.add_parser("benchmark", help=argparse.SUPPRESS)
     bench.add_argument("--config", type=Path, required=True)
     bench.add_argument(
@@ -204,7 +192,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--stage1-config",
         type=Path,
         default=None,
-        help="Telos stage1 YAML (default: src/configs/stage1.defaults.yaml next to package).",
+        help="Telos Stage I YAML (default: bundled telos/configs/stage1.defaults.yaml).",
     )
 
     # argparse.SUPPRESS does not remove subparser pseudo-actions on all supported
@@ -244,7 +232,6 @@ def main(argv: list[str] | None = None) -> int:
                 tmap=args.tmap,
                 outdir=outdir,
                 config_file=train_cfg,
-                save_intermediates=args.save_intermediates,
                 stage1_no_parallel=args.stage1_no_parallel,
                 stage1_n_workers=args.stage1_workers,
             )
@@ -258,7 +245,6 @@ def main(argv: list[str] | None = None) -> int:
                 model_dir=args.model_dir,
                 outdir=outdir,
                 config_file=args.config,
-                save_intermediates=args.save_intermediates,
                 backend=args.backend,
                 min_score=args.min_score,
                 stage1_no_parallel=args.stage1_no_parallel,

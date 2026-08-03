@@ -35,7 +35,7 @@ from telos.models import (
     stage2_model_joblib_for_backend,
     transcripts_ranked_tsv_for_backend,
 )
-from telos.models.chrom_split import split_train_val_masks, write_chrom_split_debug_lists
+from telos.models.chrom_split import split_train_val_masks
 
 logger = logging.getLogger(__name__)
 
@@ -212,11 +212,9 @@ def train_and_save_stage2(
     df: pd.DataFrame,
     models_dir: Path,
     predictions_dir: Path,
-    reports_dir: Path | None,
     *,
     autosome_train_range: tuple[int, int],
     stage1_backend_tag: str,
-    save_intermediates: bool = False,
     lgbm_n_jobs: int = -1,
 ) -> dict[str, Any]:
     """
@@ -229,18 +227,14 @@ def train_and_save_stage2(
         df: Merged Stage II frame from :func:`build_stage2_training_frame`.
         models_dir: Directory for ``stage2_model_{tag}.joblib`` and feature JSON.
         predictions_dir: Where ``transcripts.ranked.{tag}.tsv`` is written.
-        reports_dir: Optional; used for split lists and importance when ``save_intermediates``.
         autosome_train_range: Inclusive autosome index range (same as Stage I).
         stage1_backend_tag: ``rf`` or ``xgb`` (filename suffix).
-        save_intermediates: If true and ``reports_dir`` set, write chrom lists and importance.
         lgbm_n_jobs: Thread/process count for LightGBM.
 
     Returns:
         Metrics dict printed and optionally logged by caller.
     """
     train_mask, val_mask = split_train_val_masks(df, autosome_train_range, chrom_col="chrom")
-    if save_intermediates and reports_dir is not None:
-        write_chrom_split_debug_lists(df, train_mask, val_mask, reports_dir, chrom_col="chrom")
     if not train_mask.any() or not val_mask.any():
         raise ValueError("Stage II split produced empty train or validation set (check chrom column).")
 
@@ -292,8 +286,6 @@ def train_and_save_stage2(
 
     models_dir.mkdir(parents=True, exist_ok=True)
     predictions_dir.mkdir(parents=True, exist_ok=True)
-    if reports_dir is not None:
-        reports_dir.mkdir(parents=True, exist_ok=True)
 
     model_name = stage2_model_joblib_for_backend(stage1_backend_tag)
     feat_name = stage2_feature_names_json_for_backend(stage1_backend_tag)
@@ -307,12 +299,6 @@ def train_and_save_stage2(
             {"feature": features, "importance": clf_step.feature_importances_}
         ).sort_values("importance", ascending=False)
         metrics["feature_importance_top"] = fi.head(40).to_dict(orient="records")
-        if save_intermediates and reports_dir is not None:
-            fi.to_csv(
-                reports_dir / f"stage2_feature_importance_{stage1_backend_tag}.tsv",
-                sep="\t",
-                index=False,
-            )
 
     X_full = df[features]
     y_prob_all = stage2_proba_positive_binary(clf, X_full)

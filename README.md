@@ -42,7 +42,6 @@ Useful options:
 
 - `--config FILE`: override the bundled Stage I defaults.
 - `--stage1-workers N` or `--stage1-no-parallel`: control BAM feature extraction.
-- `--save-intermediates`: write optional diagnostics under `debug/`.
 - `-v` / `-vv`: show progress or debug detail; `--quiet` suppresses non-error diagnostics.
 
 Training always fits RF and XGBoost Stage I models and one Stage II model driven by each
@@ -58,7 +57,6 @@ backend.
 | `predictions/sites.scored.tsv` | Site identity columns plus `p_site_rf`, `p_site_xgb` |
 | `predictions/transcripts.ranked.{rf,xgb}.tsv` | `transcript_id`, prediction, and diagnostic true label |
 | `reports/train_metrics.csv` | Stage I and Stage II validation metrics |
-| `reports/run_manifest.json` | Arguments, versions, input fingerprints, and split settings |
 
 ## Predict
 
@@ -86,7 +84,6 @@ to `xgb`. Prediction still scores both backends and writes both ranked TSVs. Add
 | `predictions/transcripts.filtered.<backend>.gtf` | Score-filtered GTF, when `--min-score` is set |
 | `predictions/transcripts.ranked.{rf,xgb}.tsv` | Both backend transcript rankings |
 | `predictions/sites.scored.tsv` | Site scores with both backend probability columns |
-| `reports/run_manifest.json` | Reproducibility metadata |
 | `reports/summary.txt` | Concise output-path summary, also printed at completion |
 
 With `--backend both`, Telos writes `.rf.gtf` and `.xgb.gtf` variants.

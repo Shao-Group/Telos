@@ -1,6 +1,9 @@
 src/**/**__pycache__/
 src/utils/__pycache__/
 src/plotters/__pycache__/
+tests/__pycache__/
+build/
+*.egg-info/
 data/
 out/
 data_train/

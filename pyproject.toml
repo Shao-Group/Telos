@@ -23,9 +23,6 @@ dependencies = [
   "xgboost",
 ]
 
-[project.optional-dependencies]
-plot = ["matplotlib"]
-
 [project.scripts]
 telos = "telos.cli:main"
 
