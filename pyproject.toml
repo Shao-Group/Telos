@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telos"
+version = "2.0.0"
+description = "Two-stage transcript boundary scoring and ranking"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Shao Group" },
+]
+dependencies = [
+  "joblib",
+  "lightgbm",
+  "numpy",
+  "pandas",
+  "pysam",
+  "pyyaml",
+  "scikit-learn",
+  "xgboost",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib"]
+
+[project.scripts]
+telos = "telos.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Shao-Group/Telos"
+Issues = "https://github.com/Shao-Group/Telos/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["telos*"]
+
+[tool.setuptools.package-data]
+telos = ["configs/*.yaml"]

@@ -1,0 +1,50 @@
+{% set name = "telos" %}
+{% set version = "2.0.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  path: ..
+
+build:
+  noarch: python
+  number: 0
+  script: {{ PYTHON }} -m pip install . --no-deps --ignore-installed -vv
+  entry_points:
+    - telos = telos.cli:main
+
+requirements:
+  host:
+    - python >=3.10
+    - pip
+    - setuptools >=68
+    - wheel
+  run:
+    - python >=3.10
+    - joblib
+    - lightgbm
+    - numpy
+    - pandas
+    - pysam
+    - pyyaml
+    - scikit-learn
+    - xgboost
+
+test:
+  imports:
+    - telos
+  commands:
+    - telos --version
+    - telos --help
+
+about:
+  home: https://github.com/Shao-Group/Telos
+  license: BSD-3-Clause
+  license_file: LICENSE
+  summary: Two-stage transcript boundary scoring and ranking
+
+extra:
+  recipe-maintainers:
+    - Shao-Group
