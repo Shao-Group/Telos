@@ -11,12 +11,14 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 
+from telos import __version__
 from telos.commands.benchmark import run_benchmark
 from telos.commands.benchmark_matrix import run_benchmark_matrix
 from telos.commands.predict import run_predict
 from telos.commands.train import run_train
 from telos.config_loader import default_stage1_config_path
 from telos.config_models import BenchmarkIO, PredictIO, TrainIO
+from telos.logging_setup import configure_logging
 
 
 def _default_outdir(command: str) -> Path:
@@ -45,12 +47,32 @@ def build_parser() -> argparse.ArgumentParser:
         Configured :class:`argparse.ArgumentParser` (caller must invoke ``parse_args``).
     """
     p = argparse.ArgumentParser(
-        prog="Telos",
-        description="Telos: Stage I/II train, predict, and benchmark.",
+        prog="telos",
+        description="Telos: train models and score assembled transcripts.",
     )
-    sub = p.add_subparsers(dest="command", required=True)
+    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    sub = p.add_subparsers(
+        dest="command",
+        required=True,
+        metavar="{train,predict}",
+    )
 
-    train = sub.add_parser("train", help="Train Stage I/II models")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase diagnostic detail; repeat for debug logging.",
+    )
+    common.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Suppress non-error diagnostics (final output paths are still shown).",
+    )
+
+    train = sub.add_parser("train", parents=[common], help="Train Stage I/II models")
     train.add_argument("--bam", type=Path, required=True)
     train.add_argument("--gtf", type=Path, required=True)
     train.add_argument("--ref-gtf", type=Path, required=True)
@@ -84,8 +106,15 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="Stage I feature pool size (default: config or min(CPU, 8)). Implies parallel when >1.",
     )
+    train.add_argument(
+        "--save-intermediates",
+        action="store_true",
+        help="Write optional Stage II diagnostics under <outdir>/debug/.",
+    )
 
-    predict = sub.add_parser("predict", help="Run inference with pretrained models")
+    predict = sub.add_parser(
+        "predict", parents=[common], help="Run inference with trained models"
+    )
     predict.add_argument("--bam", type=Path, required=True)
     predict.add_argument("--gtf", type=Path, required=True)
     predict.add_argument("--model-dir", type=Path, required=True)
@@ -113,8 +142,25 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="Stage I feature pool size (default: config or min(CPU, 8)). Implies parallel when >1.",
     )
+    predict.add_argument(
+        "--backend",
+        choices=("xgb", "rf", "both"),
+        default="xgb",
+        help="Backend(s) for user-facing scored/filtered GTF output (default: xgb).",
+    )
+    predict.add_argument(
+        "--min-score",
+        type=float,
+        default=None,
+        help="Also write a GTF containing transcripts at or above this score.",
+    )
+    predict.add_argument(
+        "--save-intermediates",
+        action="store_true",
+        help="Create <outdir>/debug/ for optional diagnostics.",
+    )
 
-    bench = sub.add_parser("benchmark", help="Run benchmark sweeps")
+    bench = sub.add_parser("benchmark", help=argparse.SUPPRESS)
     bench.add_argument("--config", type=Path, required=True)
     bench.add_argument(
         "--outdir",
@@ -125,10 +171,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     bmat = sub.add_parser(
         "benchmark-matrix",
-        help=(
-            "Generate benchmark YAML from data_type + train/test annotation, then run benchmark "
-            "(see docs/benchmark-matrix-convention.md)."
-        ),
+        help=argparse.SUPPRESS,
     )
     bmat.add_argument(
         "--data-type",
@@ -164,6 +207,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Telos stage1 YAML (default: src/configs/stage1.defaults.yaml next to package).",
     )
 
+    # argparse.SUPPRESS does not remove subparser pseudo-actions on all supported
+    # Python versions, so prune only their help entries while keeping parsing intact.
+    sub._choices_actions = [
+        action
+        for action in sub._choices_actions
+        if action.dest not in {"benchmark", "benchmark-matrix"}
+    ]
+
     return p
 
 
@@ -181,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
         Integer exit code suitable for :func:`sys.exit`.
     """
     args = build_parser().parse_args(argv)
+    configure_logging(args)
     if args.command == "train":
         outdir = args.outdir if args.outdir is not None else _default_outdir("train")
         train_cfg = args.config if args.config is not None else default_stage1_config_path()
@@ -192,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
                 tmap=args.tmap,
                 outdir=outdir,
                 config_file=train_cfg,
+                save_intermediates=args.save_intermediates,
                 stage1_no_parallel=args.stage1_no_parallel,
                 stage1_n_workers=args.stage1_workers,
             )
@@ -205,6 +258,9 @@ def main(argv: list[str] | None = None) -> int:
                 model_dir=args.model_dir,
                 outdir=outdir,
                 config_file=args.config,
+                save_intermediates=args.save_intermediates,
+                backend=args.backend,
+                min_score=args.min_score,
                 stage1_no_parallel=args.stage1_no_parallel,
                 stage1_n_workers=args.stage1_workers,
             )

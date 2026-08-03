@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,8 @@ from telos.backends.gtfformat import GtfformatError
 from telos.candidates.load import load_candidates, load_transcript_cov_dataframe
 from telos.config_loader import get_nested
 from telos.features.stage1 import Stage1FeatureConfig, compute_stage1_features
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -154,7 +157,7 @@ def build_stage1_inputs(
                 df_cov = pd.read_pickle(cov_pkl)
                 df_all = pd.read_pickle(all_pkl)
                 cache_hit = True
-                print(f"[telos] Stage I cache hit: {cache_dir}")
+                logger.info("Stage I cache hit: %s", cache_dir)
                 return df_cov, df_all
             except Exception:
                 pass
@@ -175,7 +178,7 @@ def build_stage1_inputs(
         parallel=runtime_cfg.parallel,
         parallel_min_sites=runtime_cfg.parallel_min_sites,
         n_workers=runtime_cfg.n_workers,
-        progress=False,
+        progress=logger.isEnabledFor(logging.INFO),
     )
     if not rows:
         raise ValueError("Stage I feature extraction returned no rows.")
@@ -197,7 +200,7 @@ def build_stage1_inputs(
                 ),
                 encoding="utf-8",
             )
-            print(f"[telos] Stage I cache write: {cache_dir}")
+            logger.debug("Stage I cache write: %s", cache_dir)
         except OSError:
             pass
     return df_cov, df_all

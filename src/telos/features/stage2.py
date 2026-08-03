@@ -7,10 +7,13 @@ Stage I scoring; no BAM I/O here.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 # Join keys for coordinate-based cov × site merges (dropped from the result after each join).
 STAGE2_SITE_JOIN_KEYS: tuple[str, ...] = ("chrom", "position", "strand")
@@ -88,11 +91,15 @@ def site_table_for_stage2_merge(
     ).drop_duplicates(["chrom", "position", "strand", "site_type"], keep="first")
     n_rows_after = int(len(out))
     duplicate_rows_removed = n_rows_before - n_rows_after
-    print(
-        f"[telos] Stage II site merge ({st}, {prob_col}): "
-        f"rows={n_rows_before}, unique_sites={n_unique_sites_before}, "
-        f"dedup_rows_removed={duplicate_rows_removed}, "
-        f"columns={len(out.columns)}"
+    logger.debug(
+        "Stage II site merge (%s, %s): rows=%s, unique_sites=%s, "
+        "dedup_rows_removed=%s, columns=%s",
+        st,
+        prob_col,
+        n_rows_before,
+        n_unique_sites_before,
+        duplicate_rows_removed,
+        len(out.columns),
     )
     return out.reset_index(drop=True)
 
@@ -137,9 +144,10 @@ def merge_cov_tss_tes(
     mismatch = df["tss_chrom"].astype(str) != df["tes_chrom"].astype(str)
     n_mismatch = int(mismatch.sum())
     if n_mismatch:
-        print(
-            f"[telos] Stage II merge: {n_mismatch} transcript(s) have tss_chrom != tes_chrom "
-            "(kept; chrom set from tes_chrom)."
+        logger.debug(
+            "Stage II merge: %s transcript(s) have tss_chrom != tes_chrom "
+            "(kept; chrom set from tes_chrom).",
+            n_mismatch,
         )
     df["chrom"] = df["tes_chrom"].astype(str)
     return df

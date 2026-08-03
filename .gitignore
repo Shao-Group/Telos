@@ -5,6 +5,8 @@ data/
 out/
 data_train/
 configs/
+!src/telos/configs/
+!src/telos/configs/stage1.defaults.yaml
 logs/
 reports/
 sample_data/

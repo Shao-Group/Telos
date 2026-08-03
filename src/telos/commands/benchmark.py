@@ -1,9 +1,15 @@
-"""
-``benchmark`` CLI handler: re-exports :func:`~telos.benchmark.orchestrator.run_benchmark`.
-"""
+"""Legacy ``benchmark`` CLI redirect."""
 
 from __future__ import annotations
 
-from telos.benchmark.orchestrator import run_benchmark
+from telos.config_models import BenchmarkIO
 
-__all__ = ["run_benchmark"]
+
+def run_benchmark(cfg: BenchmarkIO) -> int:
+    """Redirect callers to the separate reproduction repository."""
+    _ = cfg
+    print(
+        "[telos] Benchmarking lives in the Telos-test repo: "
+        "https://github.com/Shao-Group/Telos-test. See its README."
+    )
+    return 2

@@ -30,6 +30,16 @@ STAGE2_FEATURE_NAMES_XGB_JSON = "stage2_feature_names_xgb.json"
 TRANSCRIPTS_RANKED_RF_TSV = "transcripts.ranked.rf.tsv"
 TRANSCRIPTS_RANKED_XGB_TSV = "transcripts.ranked.xgb.tsv"
 
+# User-facing scored and filtered GTFs (one per selected backend)
+TRANSCRIPTS_SCORED_GTF = {
+    STAGE1_BACKEND_RF: "transcripts.scored.rf.gtf",
+    STAGE1_BACKEND_XGB: "transcripts.scored.xgb.gtf",
+}
+TRANSCRIPTS_FILTERED_GTF = {
+    STAGE1_BACKEND_RF: "transcripts.filtered.rf.gtf",
+    STAGE1_BACKEND_XGB: "transcripts.filtered.xgb.gtf",
+}
+
 
 def stage1_bundle_path(site_type: str, backend: str) -> str:
     """Return the joblib filename for one Stage I bundle (``TSS``/``TES`` × ``rf``/``xgb``)."""
@@ -72,3 +82,19 @@ def transcripts_ranked_tsv_for_backend(backend: str) -> str:
     if b == STAGE1_BACKEND_XGB:
         return TRANSCRIPTS_RANKED_XGB_TSV
     raise ValueError(f"Unknown stage1 backend {backend!r}")
+
+
+def transcripts_scored_gtf_for_backend(backend: str) -> str:
+    """Return the score-injected GTF basename for ``backend``."""
+    b = backend.strip().lower()
+    if b not in STAGE1_BACKENDS:
+        raise ValueError(f"Unknown stage1 backend {backend!r}")
+    return TRANSCRIPTS_SCORED_GTF[b]
+
+
+def transcripts_filtered_gtf_for_backend(backend: str) -> str:
+    """Return the score-filtered GTF basename for ``backend``."""
+    b = backend.strip().lower()
+    if b not in STAGE1_BACKENDS:
+        raise ValueError(f"Unknown stage1 backend {backend!r}")
+    return TRANSCRIPTS_FILTERED_GTF[b]

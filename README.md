@@ -1,141 +1,114 @@
 # Telos
 
-Telos is an **annotation-agnostic** tool that improves transcript assembly accuracy by delineating **Transcript Start Sites (TSS)** and **Transcript End Sites (TES)** from RNA sequencing data, using features extracted from BAM alignments. It can be used with any assembler as long as it produces a gtf file annotated with coverage information 
+Telos scores transcript start sites (TSS), transcript end sites (TES), and complete
+transcripts from an aligned RNA-seq BAM and an assembled GTF. It supports assemblies from
+any tool that writes transcript-level `cov` attributes.
 
-## 🔍 Overview
-
-* Input: BAM files aligned with Minimap2 + assembled transcripts (gtf file) + reference annotation + gffcompare tmap on baseline gtf file.
-* Output: Trained classifiers for TSS and TES, and **Transcript Scoring** with evaluation metrics and feature importance
-* Features extracted: read density, coverage shifts, soft-clipping, entropy, splice junction distance, etc.
-* Models supported: XGBoost, RandomForest
-* Evaluation: Precision/Recall, F1, AUPR, Accuracy, Confusion Matrix
-
-## 📂 Directory Structure
-
-```
-├── project_config/         # YAML and pkl config files for TSS/TES models and project configurations
-├── src/                    # All scripts and utilities
-```
-Output directory structure:
-
-```
-├── data                 # Contains candidate sites, coverage file, and validation baseline
-├── features             # Extracted features from the candidate sites
-├── models               # Saved models after training
-├── predictions          # Stage 1 and 2 prediction on the validation dataset
-├── updated_cov          # GTF files after updating the coverage based on predictions
-├── reports
-  ├── feature_importance # Feature importance from TSS/TES randomforest model
-  ├── gffcompare         # GFFCompare results folder
-  ├── pr_data            # Precision Recall curve data for stage 1 models
-  ├── transcript_pr_data # Transcript level precision recall data
-  
-```
-
-## ⚙️ Scripts & How to Run
-All scripts are run from the **root** folder of the project where this `README.md` is located.
-
-### Step 0: Prerequisites
-All the required packages are available at `environment.yml` file. We recommend using anaconda creating a virtual environment using anaconda from the yml file. This can be done using the following command:
-```
-conda env create -f environment.yml
-```
-After installing required python packages, [RNASeqtools](https://github.com/Shao-Group/rnaseqtools) needs to be installed following the directive in the source repository. Next, install GFFCompare using bioconda in a separate conda environment in order to run `gffcompare` easily. This is required for generating results comparing Telos with the baseline. You are now ready to run Telos. 
-Now, you need the following input files:
-  - BAM File: an aligned BAM file of RNA-seq data
-  - GTF FILE: Assembled transcripts in a gtf file
-  - Reference annotation gtf
-
-
-### 1. Project setup
-Run GFFCompare on the baseline assembled gtf file. You will need to pass the `.tmap` file as input to `install.py`.
-
-Setup the project for analysis.
-  - --dir-rnaseq : RNASeq-Tools home directory
-  - --prefix: a prefix that will be concatenated to some output files
-  - --dir-output: Output directory (should be empty)
-  - --file-bam: Path to the BAM file containing aligned reads
-  - --file-gtf: Path to the GTF file of assembled transcripts
-  - --ref-anno-gtf: Path to the Reference annotation GTF file
-  - --tmap-file: *.tmap* file obtained after running GFFCompare on the baseline GTF and reference annotation.
+## Install
 
 ```bash
-python src/install.py --dir-rnaseq DIR_RNASEQ --dir-output DIR_OUTPUT --file-bam FILE_BAM --file-gtf FILE_GTF --prefix PREFIX --ref-anno-gtf REF_ANNO_GTF --tmap-file TMAP_FILE
+conda install -c bioconda telos
 ```
 
-The `config.pkl` will be inside `project_config/` directory. You need to pass this filepath in later stages of the analysis. 
-
-### 2. Extract Features
-
-Now, extract features using the bam file. By default, the script does parallel processing with number of parallel processes is set to number of available cpu cores (maximum 8). You can set the number of processes manually by passing the argument `--n-processes=$INTEGER` or you can turn off parallel processing completely by passing `--no-parallel`.
+To install the current checkout:
 
 ```bash
-python src/extract_features.py --config CONFIG_PATH
+python -m pip install .
 ```
 
-### 3. Label Features using Reference Annotation
+Telos requires Python 3.10 or newer. Training and prediction are implemented in Python and
+do not require RNASeqtools or gffcompare.
 
-Assign labels (1 = true site, 0 = false) using a distance threshold to reference TSS/TES.
+## Inputs
 
-For labeling candidate boundaries, 
-```bash
-python src/label_candidates.py \
-  -- config CONFIG_PATH
-  --distance 50 
-```
+- A coordinate-sorted BAM with a `.bai` or `.csi` index.
+- An assembled GTF whose transcript records contain numeric `cov` attributes.
+- For training, a reference annotation GTF and the assembly's gffcompare `.tmap`.
+- For prediction, a model directory produced by `telos train`. It must contain both RF and
+  XGBoost Stage I bundles and both Stage II bundles.
 
-### 4. Train Models 
-
-Trains models for both Stage 1 and 2 using a candidate features.
+## Train
 
 ```bash
-python src/train_all.py --project-config CONFIG_PATH --model-config-folder project_config
+telos train \
+  --bam sample.bam \
+  --gtf assembly.gtf \
+  --ref-gtf reference.gtf \
+  --tmap assembly.gtf.tmap \
+  --outdir train_run
 ```
-Model config folder should contain configuration for the stage 1 models. Example can be found in `project_config` folder.
 
-### 5. Validate only using pretrained model
+Useful options:
+
+- `--config FILE`: override the bundled Stage I defaults.
+- `--stage1-workers N` or `--stage1-no-parallel`: control BAM feature extraction.
+- `--save-intermediates`: write optional diagnostics under `debug/`.
+- `-v` / `-vv`: show progress or debug detail; `--quiet` suppresses non-error diagnostics.
+
+Training always fits RF and XGBoost Stage I models and one Stage II model driven by each
+backend.
+
+### Training outputs
+
+| Path | Contents |
+| --- | --- |
+| `models/stage1_{tss,tes}_{rf,xgb}_model.joblib` | Stage I model bundles |
+| `models/stage2_model_{rf,xgb}.joblib` | Stage II models |
+| `models/stage2_feature_names_{rf,xgb}.json` | Stage II feature order |
+| `predictions/sites.scored.tsv` | Site identity columns plus `p_site_rf`, `p_site_xgb` |
+| `predictions/transcripts.ranked.{rf,xgb}.tsv` | `transcript_id`, prediction, and diagnostic true label |
+| `reports/train_metrics.csv` | Stage I and Stage II validation metrics |
+| `reports/run_manifest.json` | Arguments, versions, input fingerprints, and split settings |
+
+## Predict
 
 ```bash
-python src/validate_with_pretrained.py --project-config PROJECT_CONFIG --model-config-folder MODEL_CONFIG_FOLDER  --pretrained_tss_model PRETRAINED_TSS_MODEL_PATH --pretrained_tes_model PRETRAINED_TES_MODEL_PATH --pretrained_stage2_model PRETRAINED_STAGE2_MODEL_PATH --model_type MODEL_TYPE
+telos predict \
+  --bam sample.bam \
+  --gtf assembly.gtf \
+  --model-dir train_run/models \
+  --backend xgb \
+  --outdir predict_run
 ```
 
-### 5. Generate comparison data with GTFCuff
+Use the same `--config` used during training whenever feature-extraction settings were
+customized.
 
-To generate results for comparison, run:
+`--backend {xgb,rf,both}` selects the backend used for user-facing GTF output and defaults
+to `xgb`. Prediction still scores both backends and writes both ranked TSVs. Add
+`--min-score FLOAT` to write a high-confidence filtered GTF.
 
-```bash
-python src/generate_roc_data.py --project-config PROJECT_CONFIG --gffcompare-env GFFCOMPARE_ENV
-```
+### Prediction outputs
 
+| Path | Contents |
+| --- | --- |
+| `predictions/transcripts.scored.<backend>.gtf` | Input GTF with transcript `cov` replaced by Telos score |
+| `predictions/transcripts.filtered.<backend>.gtf` | Score-filtered GTF, when `--min-score` is set |
+| `predictions/transcripts.ranked.{rf,xgb}.tsv` | Both backend transcript rankings |
+| `predictions/sites.scored.tsv` | Site scores with both backend probability columns |
+| `reports/run_manifest.json` | Reproducibility metadata |
+| `reports/summary.txt` | Concise output-path summary, also printed at completion |
 
----
-## ✍️ Author
+With `--backend both`, Telos writes `.rf.gtf` and `.xgb.gtf` variants.
 
-Developed by [Shao Group](https://github.com/Shao-Group).
----
+## Benchmarking and reproduction
 
-For help or issues, open an issue on GitHub or contact the author. 
+Benchmarking, plotting, and paper reproduction workflows live in the
+[Telos-test repository](https://github.com/Shao-Group/Telos-test). The legacy
+`benchmark` and `benchmark-matrix` command names remain as redirects for compatibility.
 
+## License and citation
 
----
-## License & Citation
+Telos is available under the BSD 3-Clause License.
 
-Telos is freely available under BSD 3-Clause License. 
-
-Copyright (c) 2025, Irtesam Mahmud Khan, Xiaofei Carl Zang, Ange Teng, Tasfia Zahin, Mingfu Shao, and The Pennsylvania State University.
-
-The preprint of Telos is available on bioRxiv [here](https://doi.org/10.1101/2025.10.13.682211).
-
-```
+```bibtex
 @article{Telos,
   title = {Boosting Transcript Assembly via Delineating Transcript Start and End Sites},
   url = {http://dx.doi.org/10.1101/2025.10.13.682211},
   DOI = {10.1101/2025.10.13.682211},
   publisher = {Cold Spring Harbor Laboratory},
-  author = {Khan,  Irtesam Mahmud and Zang,  Xiaofei Carl and Teng,  Ange and Zahin,  Tasfia and Shao,  Mingfu},
+  author = {Khan, Irtesam Mahmud and Zang, Xiaofei Carl and Teng, Ange and Zahin, Tasfia and Shao, Mingfu},
   year = {2025},
-  month = oct 
+  month = oct
 }
 ```
-
----

@@ -13,6 +13,7 @@ from multiprocessing import Pool, cpu_count
 from pathlib import Path
 from typing import Iterable
 import csv
+import logging
 import math
 import re
 from collections import Counter, OrderedDict
@@ -21,6 +22,8 @@ import numpy as np
 import pysam  # type: ignore
 
 from telos.candidates.extract import CandidateSite
+
+logger = logging.getLogger(__name__)
 
 # Open once per worker process (set by Pool initializer).
 _STAGE1_POOL_BAM: object | None = None
@@ -713,29 +716,29 @@ def compute_stage1_features(
     use_pool = parallel and n > parallel_min_sites and n_proc > 1
     if not use_pool:
         if progress:
-            print(f"[telos] Stage I features: {n} sites (sequential)", flush=True)
+            logger.info("Stage I features: %s sites (sequential)", n)
         rows: list[dict[str, object]] = []
         with pysam.AlignmentFile(bam_str, "rb") as bam:
             for i, s in enumerate(sites, 1):
                 rows.append(compute_stage1_features_for_site(bam, s, cfg))
                 if progress and (i == n or i % step == 0):
-                    print(f"[telos] Stage I features: {i}/{n} sites", flush=True)
+                    logger.info("Stage I features: %s/%s sites", i, n)
         if progress:
-            print(f"[telos] Stage I features: finished {n} sites.", flush=True)
+            logger.info("Stage I features: finished %s sites.", n)
         return rows
 
     tasks = [(s, cfg) for s in sites]
     chunksize = max(1, n // (n_proc * 8))
     if progress:
-        print(f"[telos] Stage I features: {n} sites ({n_proc} workers)", flush=True)
+        logger.info("Stage I features: %s sites (%s workers)", n, n_proc)
     rows_parallel: list[dict[str, object]] = []
     with Pool(processes=n_proc, initializer=_stage1_pool_init, initargs=(bam_str,)) as pool:
         for i, row in enumerate(pool.imap(_stage1_pool_worker, tasks, chunksize=chunksize), 1):
             rows_parallel.append(row)
             if progress and (i == n or i % step == 0):
-                print(f"[telos] Stage I features: {i}/{n} sites", flush=True)
+                logger.info("Stage I features: %s/%s sites", i, n)
     if progress:
-        print(f"[telos] Stage I features: finished {n} sites.", flush=True)
+        logger.info("Stage I features: finished %s sites.", n)
     return rows_parallel
 
 

@@ -8,6 +8,9 @@ site probabilities), writes ranked transcript TSVs for both.
 
 from __future__ import annotations
 
+from dataclasses import asdict
+import logging
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -39,16 +42,92 @@ from telos.pipeline_core import (
     build_stage1_inputs_multi_gtf,
     build_stage1_runtime_config,
 )
+from telos.reporting import write_run_manifest
 from telos.validation.preflight import (
     PreflightError,
     ensure_run_layout,
     run_preflight_train,
 )
 
+logger = logging.getLogger(__name__)
+
+_TRAIN_METRICS_COLUMNS = [
+    "stage",
+    "site_type",
+    "backend",
+    "n_train",
+    "n_val",
+    "train_pos_rate",
+    "val_pos_rate",
+    "accuracy",
+    "precision",
+    "recall",
+    "f1",
+    "aupr",
+    "roc_auc",
+    "tn",
+    "fp",
+    "fn",
+    "tp",
+]
+
+
+def _confusion_parts(value: Any) -> tuple[int | None, int | None, int | None, int | None]:
+    if (
+        isinstance(value, list)
+        and len(value) == 2
+        and all(isinstance(row, list) and len(row) == 2 for row in value)
+    ):
+        return int(value[0][0]), int(value[0][1]), int(value[1][0]), int(value[1][1])
+    return None, None, None, None
+
+
+def _write_train_metrics(metrics_payload: dict[str, Any], out_csv: Path) -> None:
+    rows: list[dict[str, Any]] = []
+    for site_type in ("tss", "tes"):
+        for backend in STAGE1_BACKENDS:
+            metrics = metrics_payload[f"{site_type}_{backend}"]
+            tn, fp, fn, tp = _confusion_parts(metrics.get("confusion_matrix"))
+            rows.append(
+                {
+                    "stage": "stage1",
+                    "site_type": metrics.get("site_type", site_type.upper()),
+                    "backend": metrics.get("backend", backend),
+                    "n_train": metrics.get("n_train"),
+                    "n_val": metrics.get("n_val"),
+                    "train_pos_rate": metrics.get("train_pos_rate"),
+                    "val_pos_rate": metrics.get("val_pos_rate"),
+                    "accuracy": metrics.get("accuracy"),
+                    "precision": metrics.get("precision"),
+                    "recall": metrics.get("recall"),
+                    "f1": metrics.get("f1"),
+                    "aupr": metrics.get("aupr"),
+                    "roc_auc": metrics.get("roc_auc"),
+                    "tn": tn,
+                    "fp": fp,
+                    "fn": fn,
+                    "tp": tp,
+                }
+            )
+    for backend in STAGE1_BACKENDS:
+        metrics = metrics_payload[f"stage2_{backend}"]
+        rows.append(
+            {
+                "stage": "stage2",
+                "backend": metrics.get("stage1_backend", backend),
+                "n_train": metrics.get("n_train"),
+                "n_val": metrics.get("n_val"),
+                "accuracy": metrics.get("accuracy"),
+                "aupr": metrics.get("aupr"),
+                "roc_auc": metrics.get("roc_auc"),
+            }
+        )
+    pd.DataFrame(rows, columns=_TRAIN_METRICS_COLUMNS).to_csv(out_csv, index=False)
+
 
 def run_train(cfg: TrainIO) -> int:
     """
-    Run the full Telos v2 training pipeline for one dataset.
+    Run the full Telos training pipeline for one dataset.
 
     **Steps (high level)**
 
@@ -69,15 +148,19 @@ def run_train(cfg: TrainIO) -> int:
         cfg_map = load_mapping_config(cfg.config_file)
         validate_stage_config(cfg_map)
     except ValueError as exc:
-        print(f"[telos] config error: {exc}")
+        logger.error("config error: %s", exc)
         return 2
     try:
         run_preflight_train(cfg.bam, cfg.gtf, cfg.ref_gtf, cfg.tmap, cfg_map)
     except PreflightError as exc:
-        print(f"[telos] preflight failed: {exc}")
+        logger.error("preflight failed: %s", exc)
         return 2
 
-    layout = ensure_run_layout(cfg.outdir, save_intermediates=False, create_aux_dirs=False)
+    layout = ensure_run_layout(
+        cfg.outdir,
+        save_intermediates=cfg.save_intermediates,
+        create_aux_dirs=True,
+    )
     runtime_cfg = build_stage1_runtime_config(
         cfg_map,
         cli_no_parallel=cfg.stage1_no_parallel,
@@ -86,9 +169,11 @@ def run_train(cfg: TrainIO) -> int:
     gtf_train_pool = [cfg.gtf, *(list(cfg.gtf_pool) if cfg.gtf_pool else [])]
     tmap_train_pool = [cfg.tmap, *(list(cfg.tmap_pool) if cfg.tmap_pool else [])]
     if len(tmap_train_pool) != len(gtf_train_pool):
-        print(
-            "[telos] Stage II pooled supervision requires one tmap per training gtf "
-            f"(got gtfs={len(gtf_train_pool)} tmaps={len(tmap_train_pool)})."
+        logger.error(
+            "Stage II pooled supervision requires one tmap per training gtf "
+            "(got gtfs=%s tmaps=%s).",
+            len(gtf_train_pool),
+            len(tmap_train_pool),
         )
         return 2
     try:
@@ -99,22 +184,23 @@ def run_train(cfg: TrainIO) -> int:
                 runtime_cfg=runtime_cfg,
             )
         else:
-            print(f"[telos] pooled training GTFs: {len(gtf_train_pool)}")
+            logger.info("pooled training GTFs: %s", len(gtf_train_pool))
             df_cov, df_all = build_stage1_inputs_multi_gtf(
                 bam=cfg.bam,
                 gtfs=gtf_train_pool,
                 runtime_cfg=runtime_cfg,
             )
     except ValueError as exc:
-        print(f"[telos] stage1 input prep failed: {exc}")
+        logger.error("stage1 input prep failed: %s", exc)
         return 2
 
+    split_policy = str(
+        get_nested(cfg_map, ["stage1", "training", "split_policy"], "chr1-10")
+    )
     try:
-        autosome_train_range = parse_split_policy(
-            str(get_nested(cfg_map, ["stage1", "training", "split_policy"], "chr1-10"))
-        )
+        autosome_train_range = parse_split_policy(split_policy)
     except ValueError as exc:
-        print(f"[telos] invalid split_policy: {exc}")
+        logger.error("invalid split_policy: %s", exc)
         return 2
 
     tol = int(get_nested(cfg_map, ["stage1", "training", "site_label_tolerance_bp"], 50))
@@ -128,7 +214,7 @@ def run_train(cfg: TrainIO) -> int:
     for st in ("TSS", "TES"):
         labeled = df_all[df_all["site_type"].str.upper() == st].copy()
         if labeled.empty:
-            print(f"[telos] no {st} feature rows; cannot train Stage I.")
+            logger.error("no %s feature rows; cannot train Stage I.", st)
             return 2
         labeled["label"] = label_sites_by_proximity(labeled, ref_df, st, tol)
         for backend in STAGE1_BACKENDS:
@@ -143,10 +229,10 @@ def run_train(cfg: TrainIO) -> int:
                     random_state=seed,
                 )
             except ImportError as exc:
-                print(f"[telos] Stage I training failed ({st}, {backend}): {exc}")
+                logger.error("Stage I training failed (%s, %s): %s", st, backend, exc)
                 return 2
             except ValueError as exc:
-                print(f"[telos] Stage I training failed ({st}, {backend}): {exc}")
+                logger.error("Stage I training failed (%s, %s): %s", st, backend, exc)
                 return 2
             metrics_payload[f"{st.lower()}_{backend}"] = m
             fname = stage1_bundle_path(st, backend)
@@ -170,13 +256,15 @@ def run_train(cfg: TrainIO) -> int:
                 else pd.concat(stage2_parts, axis=0, ignore_index=True)
             )
         except (ValueError, KeyError, TypeError, OSError, MergeError) as exc:
-            print(f"[telos] Stage II feature merge failed ({backend}): {exc}")
+            logger.error("Stage II feature merge failed (%s): %s", backend, exc)
             return 2
         if df_stage2.empty:
-            print(
-                "[telos] Stage II merged table is empty after inner-joins "
-                f"(cov + site scores + tmap labels, backend={backend}). "
-                "Check transcript_id overlap between assembly GTF, Stage I candidates, and bundle .tmap qry_id."
+            logger.error(
+                "Stage II merged table is empty after inner-joins "
+                "(cov + site scores + tmap labels, backend=%s). "
+                "Check transcript_id overlap between assembly GTF, Stage I candidates, "
+                "and bundle .tmap qry_id.",
+                backend,
             )
             return 2
 
@@ -185,18 +273,44 @@ def run_train(cfg: TrainIO) -> int:
                 df_stage2,
                 layout.models_dir,
                 layout.predictions_dir,
-                None,
+                layout.debug_dir if cfg.save_intermediates else None,
                 autosome_train_range=autosome_train_range,
                 stage1_backend_tag=backend,
-                save_intermediates=False,
+                save_intermediates=cfg.save_intermediates,
                 lgbm_n_jobs=lgbm_n_jobs,
             )
         except ImportError as exc:
-            print(f"[telos] Stage II requires lightgbm: {exc}")
+            logger.error("Stage II requires lightgbm: %s", exc)
             return 2
         except (ValueError, KeyError, OSError, RuntimeError) as exc:
-            print(f"[telos] Stage II training failed ({backend}): {exc}")
+            logger.error("Stage II training failed (%s): %s", backend, exc)
             return 2
+
+    metrics_path = layout.reports_dir / "train_metrics.csv"
+    _write_train_metrics(metrics_payload, metrics_path)
+
+    manifest_inputs = {
+        "bam": cfg.bam,
+        "gtf": cfg.gtf,
+        "ref_gtf": cfg.ref_gtf,
+    }
+    if cfg.tmap is not None:
+        manifest_inputs["tmap"] = cfg.tmap
+    if cfg.config_file is not None:
+        manifest_inputs["config"] = cfg.config_file
+    for index, path in enumerate(cfg.gtf_pool or (), start=1):
+        manifest_inputs[f"gtf_pool_{index}"] = path
+    for index, path in enumerate(cfg.tmap_pool or (), start=1):
+        manifest_inputs[f"tmap_pool_{index}"] = path
+    manifest_path = write_run_manifest(
+        layout.reports_dir / "run_manifest.json",
+        command="train",
+        args_dict=asdict(cfg),
+        inputs=manifest_inputs,
+        seed=seed,
+        split_policy=split_policy,
+        tolerance=tol,
+    )
 
     ranked_rf = layout.predictions_dir / transcripts_ranked_tsv_for_backend(STAGE1_BACKEND_RF)
     ranked_xgb = layout.predictions_dir / transcripts_ranked_tsv_for_backend(STAGE1_BACKEND_XGB)
@@ -208,15 +322,20 @@ def run_train(cfg: TrainIO) -> int:
     s2_list = ", ".join(
         str(layout.models_dir / stage2_model_joblib_for_backend(b)) for b in STAGE1_BACKENDS
     )
-    print("[telos] train complete")
-    print(f"  bam={cfg.bam}")
-    print(f"  gtf={cfg.gtf}")
-    print(f"  ref_gtf={cfg.ref_gtf}")
-    print(f"  tmap={cfg.tmap}")
-    print(f"  outdir={cfg.outdir}")
-    print(f"  stage1_models={s1_list}")
-    print(f"  sites_scored={sites_path}")
-    print(f"  stage2_models={s2_list}")
-    print(f"  transcripts_ranked_rf={ranked_rf}")
-    print(f"  transcripts_ranked_xgb={ranked_xgb}")
+    summary_lines = [
+        "[telos] train complete",
+        f"  bam={cfg.bam}",
+        f"  gtf={cfg.gtf}",
+        f"  ref_gtf={cfg.ref_gtf}",
+        f"  tmap={cfg.tmap}",
+        f"  outdir={layout.root}",
+        f"  stage1_models={s1_list}",
+        f"  sites_scored={sites_path}",
+        f"  stage2_models={s2_list}",
+        f"  transcripts_ranked_rf={ranked_rf}",
+        f"  transcripts_ranked_xgb={ranked_xgb}",
+        f"  train_metrics={metrics_path}",
+        f"  run_manifest={manifest_path}",
+    ]
+    print("\n".join(summary_lines))
     return 0

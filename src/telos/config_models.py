@@ -20,6 +20,7 @@ class RunIO:
     gtf: Path
     outdir: Path
     config_file: Path | None = None
+    save_intermediates: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -49,6 +50,8 @@ class PredictIO(RunIO):
     """
 
     model_dir: Path
+    backend: str = "xgb"
+    min_score: float | None = None
     stage1_no_parallel: bool = False
     stage1_n_workers: int | None = None
 

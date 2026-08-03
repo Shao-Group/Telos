@@ -7,6 +7,7 @@ Training merges gffcompare ``tmap`` labels; prediction omits labels and uses the
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,8 @@ from telos.models import (
 )
 from telos.models.chrom_split import split_train_val_masks, write_chrom_split_debug_lists
 
+logger = logging.getLogger(__name__)
+
 
 def _log_stage2_row_counts(
     *,
@@ -50,23 +53,28 @@ def _log_stage2_row_counts(
         if n_after_labels is not None
         else ""
     )
-    print(
-        f"[telos] Stage II merge ({context}): cov transcripts={n_cov} "
-        f"-> after TSS/TES join={n_after_sites}{extra}"
+    logger.info(
+        "Stage II merge (%s): cov transcripts=%s -> after TSS/TES join=%s%s",
+        context,
+        n_cov,
+        n_after_sites,
+        extra,
     )
     if n_cov > 20 and n_after_sites < n_cov:
-        print(
-            f"[telos] warning: {n_cov - n_after_sites} transcript(s) dropped in cov×TSS×TES join "
-            "(missing Stage I site rows or transcript_id mismatch)."
+        logger.warning(
+            "%s transcript(s) dropped in cov×TSS×TES join "
+            "(missing Stage I site rows or transcript_id mismatch).",
+            n_cov - n_after_sites,
         )
     if (
         n_after_labels is not None
         and n_after_sites > 20
         and n_after_labels < n_after_sites
     ):
-        print(
-            f"[telos] warning: {n_after_sites - n_after_labels} transcript(s) dropped merging tmap "
-            "(check .tmap qry_id vs assembly transcript_id)."
+        logger.warning(
+            "%s transcript(s) dropped merging tmap "
+            "(check .tmap qry_id vs assembly transcript_id).",
+            n_after_sites - n_after_labels,
         )
 
 
@@ -251,11 +259,13 @@ def train_and_save_stage2(
     y_pred_val = clf.predict(X_val)
     y_prob_val = stage2_proba_positive_binary(clf, X_val)
 
-    print(
-        f"[telos] Stage II: {len(features)} features, "
-        f"train n={train_mask.sum()} val n={val_mask.sum()}, "
-        f"train labels={np.bincount(y_train.to_numpy()).tolist()} "
-        f"val labels={np.bincount(y_val.to_numpy()).tolist()}"
+    logger.info(
+        "Stage II: %s features, train n=%s val n=%s, train labels=%s val labels=%s",
+        len(features),
+        train_mask.sum(),
+        val_mask.sum(),
+        np.bincount(y_train.to_numpy()).tolist(),
+        np.bincount(y_val.to_numpy()).tolist(),
     )
 
     metrics: dict[str, Any] = {
@@ -273,10 +283,11 @@ def train_and_save_stage2(
         metrics["roc_auc"] = None
         metrics["aupr"] = None
 
-    print(
-        f"[telos] Stage II val: accuracy={metrics['accuracy']:.4f}"
-        + (f" roc_auc={metrics['roc_auc']:.4f}" if metrics.get("roc_auc") is not None else "")
-        + (f" aupr={metrics['aupr']:.4f}" if metrics.get("aupr") is not None else "")
+    logger.info(
+        "Stage II val: accuracy=%.4f%s%s",
+        metrics["accuracy"],
+        f" roc_auc={metrics['roc_auc']:.4f}" if metrics.get("roc_auc") is not None else "",
+        f" aupr={metrics['aupr']:.4f}" if metrics.get("aupr") is not None else "",
     )
 
     models_dir.mkdir(parents=True, exist_ok=True)

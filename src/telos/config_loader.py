@@ -1,8 +1,8 @@
 """
 Load and navigate Telos YAML/JSON configuration files.
 
-Paths are resolved relative to the caller; the default Stage I file lives beside the package under
-``src/configs/``.
+Paths are resolved relative to the caller; the default Stage I file is package data under
+``telos/configs/``.
 """
 
 from __future__ import annotations
@@ -13,13 +13,11 @@ from typing import Any
 
 def default_stage1_config_path() -> Path:
     """
-    Return the absolute path to ``src/configs/stage1.defaults.yaml``.
+    Return the absolute path to packaged ``telos/configs/stage1.defaults.yaml``.
 
-    The file is found by resolving this module’s path, ascending one level to ``telos``, then one
-    more to ``src``, then joining ``configs/stage1.defaults.yaml``. Used when CLI ``--config`` is
-    omitted or benchmark YAML omits an explicit train config path.
+    Used when CLI ``--config`` is omitted.
     """
-    return Path(__file__).resolve().parent.parent / "configs" / "stage1.defaults.yaml"
+    return Path(__file__).resolve().parent / "configs" / "stage1.defaults.yaml"
 
 
 def load_mapping_config(path: Path | None) -> dict[str, Any]:
