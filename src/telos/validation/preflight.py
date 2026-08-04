@@ -27,12 +27,18 @@ class RunLayout:
     reports_dir: Path
 
 
-def ensure_run_layout(outdir: Path, create_aux_dirs: bool = True) -> RunLayout:
+def ensure_run_layout(
+    outdir: Path,
+    create_aux_dirs: bool = True,
+    *,
+    create_models_dir: bool = True,
+) -> RunLayout:
     """
     Create output subdirectories and return their paths.
 
-    Always creates ``models/`` and ``predictions/``. If ``create_aux_dirs``, also creates
-    ``reports/``.
+    Always creates ``predictions/``. Creates ``models/`` when ``create_models_dir`` is true
+    (training writes models there; prediction reads models from ``--model-dir`` and does not
+    need a local ``models/``). If ``create_aux_dirs``, also creates ``reports/``.
 
     Returns:
         :class:`RunLayout` with resolved absolute paths.
@@ -42,8 +48,9 @@ def ensure_run_layout(outdir: Path, create_aux_dirs: bool = True) -> RunLayout:
     predictions_dir = root / "predictions"
     reports_dir = root / "reports"
 
-    for d in (models_dir, predictions_dir):
-        d.mkdir(parents=True, exist_ok=True)
+    predictions_dir.mkdir(parents=True, exist_ok=True)
+    if create_models_dir:
+        models_dir.mkdir(parents=True, exist_ok=True)
     if create_aux_dirs:
         reports_dir.mkdir(parents=True, exist_ok=True)
     return RunLayout(

@@ -63,7 +63,7 @@ def run_predict(cfg: PredictIO) -> int:
         logger.error("preflight failed: %s", exc)
         return 2
 
-    layout = ensure_run_layout(cfg.outdir, create_aux_dirs=True)
+    layout = ensure_run_layout(cfg.outdir, create_aux_dirs=True, create_models_dir=False)
     runtime_cfg = build_stage1_runtime_config(
         cfg_map,
         cli_no_parallel=cfg.stage1_no_parallel,

@@ -12,6 +12,9 @@ configs/
 !src/telos/configs/stage1.defaults.yaml
 logs/
 reports/
+runs/
+.snakemake/
 sample_data/
 old_src/
 project_config/*config.pkl
+run_configs/
