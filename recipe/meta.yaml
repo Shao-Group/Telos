@@ -6,6 +6,10 @@ package:
   version: {{ version }}
 
 source:
+  # Local builds: path to the repo root.
+  # Bioconda PR: replace with a tagged GitHub release, e.g.
+  #   url: https://github.com/Shao-Group/Telos/archive/refs/tags/v{{ version }}.tar.gz
+  #   sha256: <sha256 of that tarball>
   path: ..
 
 build:

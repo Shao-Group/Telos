@@ -189,19 +189,32 @@ def run_train(cfg: TrainIO) -> int:
         return 2
 
     split_policy = str(
-        get_nested(cfg_map, ["stage1", "training", "split_policy"], "chr1-10")
+        cfg.split_policy
+        if cfg.split_policy is not None
+        else get_nested(cfg_map, ["stage1", "training", "split_policy"], "chr1-10")
     )
     try:
         autosome_train_range = parse_split_policy(split_policy)
     except ValueError as exc:
         logger.error("invalid split_policy: %s", exc)
         return 2
+    logger.info(
+        "train/val split_policy=%s (train autosomes %s-%s; all other contigs = validation)",
+        split_policy,
+        autosome_train_range[0],
+        autosome_train_range[1],
+    )
 
     tol = int(get_nested(cfg_map, ["stage1", "training", "site_label_tolerance_bp"], 50))
-    rf_cfg = get_nested(cfg_map, ["stage1", "training", "random_forest"], {}) or {}
-    xgb_cfg = get_nested(cfg_map, ["stage1", "training", "xgboost"], {}) or {}
+    rf_cfg = dict(get_nested(cfg_map, ["stage1", "training", "random_forest"], {}) or {})
+    xgb_cfg = dict(get_nested(cfg_map, ["stage1", "training", "xgboost"], {}) or {})
     seed = int(get_nested(cfg_map, ["stage1", "training", "random_state"], 42))
     lgbm_n_jobs = int(get_nested(cfg_map, ["stage1", "training", "lightgbm", "n_jobs"], -1))
+    if cfg.n_jobs is not None:
+        rf_cfg["n_jobs"] = int(cfg.n_jobs)
+        xgb_cfg["n_jobs"] = int(cfg.n_jobs)
+        lgbm_n_jobs = int(cfg.n_jobs)
+        logger.info("model n_jobs override=%s (RF, XGBoost, LightGBM)", cfg.n_jobs)
     ref_df = reference_sites_from_gtf(cfg.ref_gtf)
     metrics_payload: dict[str, Any] = {}
 
@@ -297,6 +310,7 @@ def run_train(cfg: TrainIO) -> int:
         f"  gtf={cfg.gtf}",
         f"  ref_gtf={cfg.ref_gtf}",
         f"  tmap={cfg.tmap}",
+        f"  split_policy={split_policy}",
         f"  outdir={layout.root}",
         f"  stage1_models={s1_list}",
         f"  sites_scored={sites_path}",

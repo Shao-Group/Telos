@@ -1,5 +1,7 @@
 stage1:
   training:
+    # Train on primary autosomes in this inclusive range (chr1-10 style).
+    # All other contigs (remaining autosomes, X/Y/MT, scaffolds) are validation.
     site_label_tolerance_bp: 50
     split_policy: chr1-10
     random_state: 42
@@ -7,7 +9,7 @@ stage1:
       n_estimators: 300
       max_depth: null
       max_features: sqrt
-      n_jobs: 20
+      n_jobs: -1
       class_weight: balanced_subsample
     xgboost:
       n_estimators: 300
@@ -17,9 +19,9 @@ stage1:
       colsample_bytree: 0.8
       reg_lambda: 3
       reg_alpha: 0.5
-      n_jobs: 20
+      n_jobs: -1
     lightgbm:
-      n_jobs: 20
+      n_jobs: -1
   feature_extraction:
     window_size: 100
     density_window: 100
@@ -29,7 +31,8 @@ stage1:
     splice_site_window: 300
     gradient_analysis_range: 100
     extended_window: 1000
-    cache_dir: runs/telos_stage1_feature_cache
+    # null = no on-disk feature cache. Set a path or TELOS_STAGE1_CACHE_DIR to enable.
+    cache_dir: null
     parallel: true
     parallel_min_sites: 50
     n_workers: null

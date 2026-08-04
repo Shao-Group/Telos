@@ -29,7 +29,8 @@ class TrainIO(RunIO):
 
     ``ref_gtf`` supplies reference TSS/TES for Stage I labels. ``tmap`` is the gffcompare
     transcript mapping for Stage II supervision. ``stage1_*`` flags override YAML parallelism
-    for BAM feature extraction only.
+    for BAM feature extraction only. ``split_policy`` / ``n_jobs`` override matching YAML
+    training keys when set.
     """
 
     ref_gtf: Path
@@ -38,6 +39,8 @@ class TrainIO(RunIO):
     tmap_pool: tuple[Path, ...] | None = None
     stage1_no_parallel: bool = False
     stage1_n_workers: int | None = None
+    split_policy: str | None = None
+    n_jobs: int | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

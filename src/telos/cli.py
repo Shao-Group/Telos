@@ -150,6 +150,26 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="Stage I feature pool size (default: config or min(CPU, 8)). Implies parallel when >1.",
     )
+    train.add_argument(
+        "--split-policy",
+        type=str,
+        default=None,
+        metavar="SPEC",
+        help=(
+            "Chromosomes used for training, e.g. chr1-10 (default from config). "
+            "Primary autosomes in the range are train; all other contigs are validation."
+        ),
+    )
+    train.add_argument(
+        "--n-jobs",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Threads for RF / XGBoost / LightGBM fitting (overrides config). "
+            "Use -1 for all CPUs."
+        ),
+    )
     predict = sub.add_parser(
         "predict", parents=[common], help="Run inference with trained models"
     )
@@ -290,6 +310,8 @@ def main(argv: list[str] | None = None) -> int:
                 config_file=train_cfg,
                 stage1_no_parallel=args.stage1_no_parallel,
                 stage1_n_workers=args.stage1_workers,
+                split_policy=args.split_policy,
+                n_jobs=args.n_jobs,
             )
         )
     if args.command == "predict":
