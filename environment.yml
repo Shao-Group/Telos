@@ -12,5 +12,6 @@ dependencies:
   - pyyaml
   - scikit-learn
   - xgboost
+  - gffcompare
   - pip
   - setuptools

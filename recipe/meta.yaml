@@ -31,6 +31,7 @@ requirements:
     - pyyaml
     - scikit-learn
     - xgboost
+    - gffcompare
 
 test:
   imports:
@@ -38,6 +39,7 @@ test:
   commands:
     - telos --version
     - telos --help
+    - telos prepare-gtf --help
 
 about:
   home: https://github.com/Shao-Group/Telos

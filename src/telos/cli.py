@@ -15,6 +15,7 @@ from telos import __version__
 from telos.commands.benchmark import run_benchmark
 from telos.commands.benchmark_matrix import run_benchmark_matrix
 from telos.commands.predict import run_predict
+from telos.commands.prepare_gtf import PrepareGtfIO, run_prepare_gtf
 from telos.commands.train import run_train
 from telos.config_loader import default_stage1_config_path
 from telos.config_models import BenchmarkIO, PredictIO, TrainIO
@@ -26,7 +27,7 @@ def _default_outdir(command: str) -> Path:
     Build a timestamped output directory under the current working directory.
 
     Pattern: ``./telos_<command>_<YYYYMMDD_HHMMSS>/`` (resolved absolute). Used when ``train``,
-    ``predict``, or ``benchmark`` omits ``--outdir``.
+    ``predict``, ``prepare-gtf``, or ``benchmark`` omits ``--outdir``.
     """
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return (Path.cwd() / f"telos_{command}_{stamp}").resolve()
@@ -34,14 +35,15 @@ def _default_outdir(command: str) -> Path:
 
 def build_parser() -> argparse.ArgumentParser:
     """
-    Construct the root parser with four required subcommands.
+    Construct the root parser with public and hidden subcommands.
 
-    Subcommands:
+    Public subcommands:
 
-    - ``train`` — paths for BAM, assembly GTF, reference GTF, gffcompare tmap; optional config and Stage I parallelism flags.
-    - ``predict`` — BAM, GTF, ``--model-dir``; optional config and Stage I parallelism flags.
-    - ``benchmark`` — benchmark YAML path; optional outdir.
-    - ``benchmark-matrix`` — data type and train/test annotation choices; required benchmark ``--outdir``; optional bundle root and stage1 config.
+    - ``prepare-gtf`` — normalize assembler GTF (optional TPM→``cov``) and optionally build a tmap.
+    - ``train`` — BAM, assembly GTF, reference GTF, gffcompare tmap.
+    - ``predict`` — BAM, GTF, ``--model-dir``.
+
+    Hidden compatibility redirects: ``benchmark``, ``benchmark-matrix``.
 
     Returns:
         Configured :class:`argparse.ArgumentParser` (caller must invoke ``parse_args``).
@@ -54,7 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(
         dest="command",
         required=True,
-        metavar="{train,predict}",
+        metavar="{prepare-gtf,train,predict}",
     )
 
     common = argparse.ArgumentParser(add_help=False)
@@ -70,6 +72,48 @@ def build_parser() -> argparse.ArgumentParser:
         "--quiet",
         action="store_true",
         help="Suppress non-error diagnostics (final output paths are still shown).",
+    )
+
+    prepare = sub.add_parser(
+        "prepare-gtf",
+        parents=[common],
+        help="Normalize assembly GTF (optional TPM→cov) and optionally build a tmap",
+    )
+    prepare.add_argument(
+        "--gtf",
+        type=Path,
+        required=True,
+        help="Assembler GTF (StringTie, IsoQuant, Scallop2, …).",
+    )
+    prepare.add_argument(
+        "--tpm",
+        type=Path,
+        default=None,
+        help="Optional abundance TSV (IsoQuant transcript TPM) written into transcript cov.",
+    )
+    prepare.add_argument(
+        "--ref-gtf",
+        type=Path,
+        default=None,
+        help="Reference annotation GTF (required with --make-tmap).",
+    )
+    prepare.add_argument(
+        "--make-tmap",
+        action="store_true",
+        help="Run gffcompare to produce assembly.tmap (requires --ref-gtf and gffcompare on PATH).",
+    )
+    prepare.add_argument(
+        "--gffcompare",
+        type=Path,
+        default=None,
+        dest="gffcompare_bin",
+        help="Path to gffcompare binary (default: search PATH).",
+    )
+    prepare.add_argument(
+        "--outdir",
+        type=Path,
+        default=None,
+        help="Output directory (default: ./telos_prepare-gtf_<timestamp>).",
     )
 
     train = sub.add_parser("train", parents=[common], help="Train Stage I/II models")
@@ -210,8 +254,8 @@ def main(argv: list[str] | None = None) -> int:
     """
     Parse CLI arguments and dispatch to the appropriate command handler.
 
-    Exit codes are delegated to ``run_train``, ``run_predict``, ``run_benchmark``, or
-    ``run_benchmark_matrix`` (typically ``0`` success, ``1`` partial benchmark failure, ``2`` config/preflight).
+    Exit codes are delegated to command handlers (typically ``0`` success,
+    ``1`` partial benchmark failure, ``2`` config/preflight/prepare error).
 
     Args:
         argv: Argument vector; ``None`` means use ``sys.argv[1:]`` inside :func:`argparse.ArgumentParser.parse_args`.
@@ -221,6 +265,18 @@ def main(argv: list[str] | None = None) -> int:
     """
     args = build_parser().parse_args(argv)
     configure_logging(args)
+    if args.command == "prepare-gtf":
+        outdir = args.outdir if args.outdir is not None else _default_outdir("prepare-gtf")
+        return run_prepare_gtf(
+            PrepareGtfIO(
+                gtf=args.gtf,
+                outdir=outdir,
+                tpm=args.tpm,
+                ref_gtf=args.ref_gtf,
+                make_tmap=args.make_tmap,
+                gffcompare_bin=args.gffcompare_bin,
+            )
+        )
     if args.command == "train":
         outdir = args.outdir if args.outdir is not None else _default_outdir("train")
         train_cfg = args.config if args.config is not None else default_stage1_config_path()
