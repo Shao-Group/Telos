@@ -28,3 +28,4 @@ TOOL_PLAN.md
 configs/
 !src/telos/configs/
 !src/telos/configs/stage1.defaults.yaml
+release_assets/

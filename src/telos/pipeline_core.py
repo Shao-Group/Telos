@@ -49,9 +49,15 @@ def _file_fingerprint(path: Path) -> dict[str, Any]:
     return {"path": str(p), "size": st.st_size, "mtime_ns": st.st_mtime_ns}
 
 
+# Bump when Stage I feature column schema changes so stale caches cannot be reused.
+# Align with Telos-repro / frozen Stage I quirk so caches cannot mix schemas.
+STAGE1_FEATURE_SCHEMA_VERSION = "golden_up_down_stream_ratio_quirk_v1"
+
+
 def _stage1_cache_key(*, bam: Path, gtf: Path, runtime_cfg: Stage1RuntimeConfig) -> str:
     """Stable hash for Stage I feature/cov cache entries."""
     payload = {
+        "feature_schema_version": STAGE1_FEATURE_SCHEMA_VERSION,
         "bam": _file_fingerprint(bam),
         "bam_index": _file_fingerprint(Path(str(bam) + ".bai")) if Path(str(bam) + ".bai").is_file() else None,
         "gtf": _file_fingerprint(gtf),

@@ -22,6 +22,7 @@ import numpy as np
 import pysam  # type: ignore
 
 from telos.candidates.extract import CandidateSite
+from telos.validation.preflight import absolute_bam_path
 
 logger = logging.getLogger(__name__)
 
@@ -705,7 +706,7 @@ def compute_stage1_features(
     if not sites:
         return []
 
-    bam_str = str(bam_path.resolve())
+    bam_str = str(absolute_bam_path(bam_path))
     if n_workers is None:
         n_proc = min(cpu_count(), 8)
     else:

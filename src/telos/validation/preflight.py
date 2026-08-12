@@ -8,6 +8,7 @@ with clear :class:`PreflightError` messages. :class:`RunLayout` standardizes out
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -118,21 +119,41 @@ def _candidate_bam_indices(bam_path: Path) -> Iterable[Path]:
     yield bam_path.with_suffix(".csi")  # sample.csi
 
 
+def absolute_bam_path(bam_path: Path) -> Path:
+    """
+    Return an absolute BAM path **without** following symlinks.
+
+    ``Path.resolve()`` follows symlinks, which breaks pysam index discovery when the
+    ``.bai`` sits next to the symlink (e.g. ``star.sort.bam`` → real BAM, index is
+    ``star.sort.bam.bai``) rather than next to the resolved target.
+    """
+    p = Path(bam_path).expanduser()
+    if not p.is_absolute():
+        p = Path.cwd() / p
+    return Path(os.path.normpath(str(p)))
+
+
 def _validate_bam_and_index(bam_path: Path) -> None:
     """
     Assert BAM exists, suffix is ``.bam``, a sidecar index exists, and pysam reports coordinate sort.
 
-    Opens the BAM with pysam and reads header ``HD:SO``; must be ``coordinate``. Raises
-    :class:`PreflightError` if pysam is missing, the file is not a BAM, or sort order is wrong.
+    Opens the BAM with pysam and reads header ``HD:SO``; must be ``coordinate``. Also checks
+    that pysam can see an index on the path Telos will open (absolute, symlink-preserving).
+    Raises :class:`PreflightError` if pysam is missing, the file is not a BAM, or sort order is wrong.
     """
     _validate_file_exists(bam_path, "BAM")
     if bam_path.suffix.lower() != ".bam":
         raise PreflightError(f"Expected a .bam input: {bam_path}")
 
-    has_index = any(idx.exists() and idx.is_file() for idx in _candidate_bam_indices(bam_path))
+    open_path = absolute_bam_path(bam_path)
+    has_index = any(idx.exists() and idx.is_file() for idx in _candidate_bam_indices(open_path))
+    if not has_index:
+        # Also accept an index next to the user-supplied path (relative symlink cases).
+        has_index = any(idx.exists() and idx.is_file() for idx in _candidate_bam_indices(bam_path))
     if not has_index:
         raise PreflightError(
-            f"BAM index not found for {bam_path}. Expected one of .bai/.csi variants."
+            f"BAM index not found for {bam_path}. Expected one of .bai/.csi variants "
+            f"next to the BAM (e.g. {open_path.name}.bai)."
         )
 
     # Try to verify coordinate sort order via pysam header.
@@ -144,12 +165,18 @@ def _validate_bam_and_index(bam_path: Path) -> None:
         ) from exc
 
     try:
-        with pysam.AlignmentFile(str(bam_path), "rb") as bam:
+        with pysam.AlignmentFile(str(open_path), "rb") as bam:
             hd = dict(bam.header).get("HD", {})
             so = hd.get("SO", "")
             if str(so).lower() != "coordinate":
                 raise PreflightError(
                     f"BAM must be coordinate-sorted (HD:SO=coordinate), got SO={so!r} for {bam_path}"
+                )
+            if not bam.has_index():
+                raise PreflightError(
+                    f"pysam cannot use an index for {open_path}. "
+                    f"If the BAM is a symlink, place the .bai next to the symlink path "
+                    f"(e.g. {open_path.name}.bai), not only next to the resolved target."
                 )
     except PreflightError:
         raise
